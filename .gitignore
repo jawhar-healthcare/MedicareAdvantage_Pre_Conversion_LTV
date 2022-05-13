@@ -1,5 +1,5 @@
 # Data files
 /data 
 
-
+*.pyc
 *.DS_Store
