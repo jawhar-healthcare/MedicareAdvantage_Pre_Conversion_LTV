@@ -45,4 +45,7 @@ def get_jornaya_data(
     jornaya.reset_index(inplace=True)
     jornaya.drop(columns=['index'], inplace= True)
 
+    ## Add a prefix "jrn_" to all columns
+    jornaya = jornaya.add_prefix("jrn_")
+
     return jornaya
