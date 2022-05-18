@@ -40,12 +40,9 @@ def get_jornaya_data(
 
     jornaya = pd.read_sql_query(text(jor_sql), engine)
 
-    ## Drop all Duplicated row entries
-    jornaya = jornaya.drop_duplicates(keep='last', ignore_index=True)
-    jornaya.reset_index(inplace=True)
-    jornaya.drop(columns=['index'], inplace= True)
-
     ## Add a prefix "jrn_" to all columns
     jornaya = jornaya.add_prefix("jrn_")
+
+    jornaya = jornaya.groupby(by= "jrn_boberdoo_lead_id").first().reset_index()
 
     return jornaya
