@@ -7,7 +7,6 @@ from warnings import filterwarnings
 filterwarnings("ignore")
 
 def load_transunion_data(
-    query_string: str,
     username: str,
     password: str,
     account: str
@@ -26,6 +25,13 @@ def load_transunion_data(
         account= account
     )
     cursor = connect.cursor()
+    
+    query_string = '''
+        select *,
+        SCORES[0][2]::FLOAT AS contact_score,
+        SCORES[1][2]::FLOAT AS credit_score 
+        from PROD_STAGE.WEB_TRACKING.INTERNAL_TRANSUNION_EVENT
+    '''
     cursor.execute(query_string)
 
     tu_data = cursor.fetch_pandas_all()
@@ -34,7 +40,6 @@ def load_transunion_data(
 
 
 def preprocess_transunion_data(
-    query_string: str,
     username: str,
     password: str,
     account: str,
@@ -46,7 +51,6 @@ def preprocess_transunion_data(
     """
     # Load TU Data
     tu_data = load_transunion_data(
-        query_string= query_string,
         username= username,
         password= password,
         account= account
@@ -60,6 +64,7 @@ def preprocess_transunion_data(
     trunc_tu_data = tu_data[tu_data['PHONE_NUMBER'].isin(phone_numbers_list)]
     trunc_tu_data = trunc_tu_data[trunc_tu_data['FIRST_NAME'].isin(first_names_list)]
     trunc_tu_data = trunc_tu_data[trunc_tu_data['LAST_NAME'].isin(last_names_list)]
+    
     trunc_tu_data.reset_index(inplace=True)
     trunc_tu_data.drop(columns=['index'], inplace= True)
 
@@ -67,6 +72,22 @@ def preprocess_transunion_data(
     trunc_tu_data = trunc_tu_data.add_prefix("tu_")
 
     return trunc_tu_data
+
+
+# if __name__ == "__main__":
+#     tu = load_transunion_data(
+#         query_string= '''
+#             select *,
+#             SCORES[0][2]::FLOAT AS contact_score,
+#             SCORES[1][2]::FLOAT AS credit_score 
+#         from PROD_STAGE.WEB_TRACKING.INTERNAL_TRANSUNION_EVENT
+#         ''',
+#         username= "rutvik_bhende", 
+#         password= "0723@RutuJuly",
+#         account = "uza72979.us-east-1"
+#     )
+
+#     print(tu)
 
 
 
