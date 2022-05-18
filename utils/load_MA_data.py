@@ -1,10 +1,11 @@
 import pandas as pd
 from sqlalchemy import text
-
+import numpy as np 
+import datetime
 
 def get_MA_data(engine):
 
-    ma_appls_sql = """
+    ma_data_sql = """
     SELECT
         fapp.application_id,
         fapp.owner_email,
@@ -40,11 +41,43 @@ def get_MA_data(engine):
     WHERE bk_product IN (1048, 1019, 1020, 1052);
     """
 
-    ma_appls = pd.read_sql_query(text(ma_appls_sql), engine)
-    
-    ## Drop Duplicate instances
-    ma_appls = ma_appls.drop_duplicates(keep='last', ignore_index=True)
-    ma_appls.reset_index(inplace=True)
-    ma_appls.drop(columns=['index'], inplace= True)
+    ma_data = pd.read_sql_query(text(ma_data_sql), engine)
 
-    return ma_appls
+    ma_data = ma_data.groupby(by= "application_id").first().reset_index()
+
+    ma_data['first_name'] = ma_data["owner_name"].apply(lambda x: x.split(" ")[0])
+    ma_data['last_name'] = ma_data["owner_name"].apply(lambda x: x.split(" ")[-1])
+
+    ma_data.drop(columns=['owner_name'], inplace= True)
+
+    ma_data['sk_submitted_date'] = pd.to_datetime(
+        ma_data['sk_submitted_date'], 
+        format="%Y%m%d",
+        errors= "coerce"
+    )
+    ma_data["submitted_month"] = ma_data['sk_submitted_date'].dt.month
+    ma_data["submitted_year"] = ma_data['sk_submitted_date'].dt.year
+
+    ma_data["owner_phone"] = ma_data["owner_phone"].apply(
+        lambda x: x[:10] if x is not None and len(x) > 9 else np.nan
+    )
+
+    ma_data["area_code"] = ma_data["owner_phone"].apply(
+        lambda x: x[:3] if x is not np.nan else np.nan
+    )
+
+    ma_data['sk_date_of_birth'] = pd.to_datetime(
+        ma_data['sk_date_of_birth'], 
+        format="%Y%m%d",
+        errors= "coerce"
+    )
+
+    ma_data['age'] = ma_data['sk_date_of_birth'].apply(
+        lambda x: int(
+            (
+                datetime.datetime.now().date() - datetime.datetime.date(x)
+            ).days / 365.2425
+        )
+    )
+    
+    return ma_data
