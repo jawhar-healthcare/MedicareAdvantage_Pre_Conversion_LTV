@@ -32,9 +32,10 @@ def main():
     
     ## Check if system is configured with AWS IAM account
     try: 
-        boto3.resource('iam').CurrentUser().arn
+        user_arn = boto3.resource('iam').CurrentUser().arn
+        logger.info(f"User Amazon Resource Name (ARN) is {user_arn}")
     except:
-        logger.exception("System is not configured with AWS IAM account.")
+        logger.exception("System is not configured with AWS IAM account; ARN is not available.")
 
     try:
         ## Load Secret Names
@@ -46,6 +47,7 @@ def main():
         logger.info("AWS Redshift Credentials Loaded.")
     except:
         logger.exception("Could not load AWS Redshift Credentials. ")
+    
     ## Create AWS Redshift engines
     ## ISC
     isc_engine_string = "postgresql+psycopg2://%s:%s@%s:%d/%s" \
