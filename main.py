@@ -1,13 +1,18 @@
 import numpy as np 
 import pandas as pd 
 import boto3
+import json
 from pyparsing import col
 from sqlalchemy import create_engine
 from sqlalchemy import text
 import psycopg2
 from typing import Optional, Tuple, Union
+import logging
+import pathlib
+from logging import handlers
+from utils.utils import get_secret, get_logger
 
-from utils.utils import (
+from utils.preprocessing_utils import (
     get_MA_data,
     preprocess_post_conversion_ltv_data,
     get_jornaya_data, 
@@ -19,31 +24,49 @@ from utils.preprocess_ma_data import preprocess_ma_data
 from warnings import filterwarnings
 filterwarnings("ignore")
 
-## AWS RedShift Credentials
-REDSHIFT_USERNAME = "rutvik_bhende"
-REDSHIFT_PASSWORD = "B08tLOo-n69d5t4"
-PORT = 5439
+# logging.basicConfig(level= logging.INFO)
+
+logger = get_logger(name= pathlib.Path(__file__))
 
 def main():
-    ## ISC creds
-    redshift_endpoint_isc = "isc-prd-data-warehouse.c3aww65gl0dd.us-east-1.redshift.amazonaws.com"
-    dbname_isc = "isc"
-    ## HC creds
-    redshift_endpoint_hc = "data-warehouse.aws.healthcare.com"
-    dbname_hc = "hc"
-    ## PH creds
-    redshift_endpoint_ph = "data-warehouse.pivothealth.com"
-    dbname_ph = "ph"
+    
+    ## Check if system is configured with AWS IAM account
+    try: 
+        boto3.resource('iam').CurrentUser().arn
+    except:
+        logger.exception("System is not configured with AWS IAM account.")
 
+    try:
+        ## Load Secret Names
+        with open("config/secret_names.json") as f:
+            secret_names = json.load(f)
+        ## Get Creds from AWS Secrets Manager
+        hc_secret = json.loads(get_secret(secret_name= secret_names["HC"])["SecretString"])
+        isc_secret = json.loads(get_secret(secret_name= secret_names["ISC"])["SecretString"])
+        logger.info("AWS Redshift Credentials Loaded.")
+    except:
+        logger.exception("Could not load AWS Redshift Credentials. ")
     ## Create AWS Redshift engines
     ## ISC
     isc_engine_string = "postgresql+psycopg2://%s:%s@%s:%d/%s" \
-                    % (REDSHIFT_USERNAME, REDSHIFT_PASSWORD, redshift_endpoint_isc, PORT, dbname_isc)
+                    % (
+                        isc_secret["username"],
+                        isc_secret["password"],
+                        isc_secret["host"],
+                        isc_secret["port"],
+                        "isc"
+                    )
     isc_engine = create_engine(isc_engine_string)
 
     ## HC
     hc_engine_string = "postgresql+psycopg2://%s:%s@%s:%d/%s" \
-                    % (REDSHIFT_USERNAME, REDSHIFT_PASSWORD, redshift_endpoint_hc, PORT, dbname_hc)
+                    % (
+                        hc_secret["username"],
+                        hc_secret["password"],
+                        hc_secret["host"],
+                        hc_secret["port"],
+                        "hc"
+                    )
     hc_engine = create_engine(hc_engine_string)
 
 
