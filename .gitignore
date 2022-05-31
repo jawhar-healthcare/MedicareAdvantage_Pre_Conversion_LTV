@@ -1,5 +1,12 @@
 # Data files
 /data 
+/logs
 
 *.pyc
 *.DS_Store
+
+/catboost_info
+
+/.ipynb_checkpoints
+
+*.png
