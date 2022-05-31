@@ -10,6 +10,8 @@ from botocore.exceptions import ClientError
 import logging
 from logging import handlers
 
+from models_py.catboost import X
+
 ### AWS Secrets Manager retrieval code
 
 def get_secret(secret_name: str,):
@@ -56,7 +58,9 @@ def get_secret(secret_name: str,):
         if 'SecretString' in get_secret_value_response:
             secret = get_secret_value_response['SecretString']
         else:
-            decoded_binary_secret = base64.b64decode(get_secret_value_response['SecretBinary'])
+            decoded_binary_secret = base64.b64decode(
+                get_secret_value_response['SecretBinary']
+            )
             
     return get_secret_value_response
 
@@ -66,7 +70,9 @@ def get_secret(secret_name: str,):
 
 def get_logger(name):
     
-    formatter = logging.Formatter("%(asctime)s — %(filename)s — %(levelname)s — %(message)s")
+    formatter = logging.Formatter(
+        "%(asctime)s — %(filename)s - %(lineno)d — %(levelname)s — %(message)s"
+    )
     file_name = f"{name.stem}.log"
 
     logger = logging.getLogger(str(name))
@@ -78,5 +84,72 @@ def get_logger(name):
     logger.propagate = False
     
     return logger
+
+
+## Calculation of performance metrics
+def calc_regression_metrics(
+    model,
+    X_train,
+    y_train,
+    X_test,
+    y_test
+):
+    import numpy as np
+    from sklearn.metrics import (
+        mean_squared_error,
+        mean_absolute_error,
+        r2_score,
+    )
+    ## Predictions
+    train_preds = model.predict(X= X_train)
+    test_preds = model.predict(X= X_test)
+
+    ## MSE
+    train_mse = mean_squared_error(
+        y_true= y_train,
+        y_pred= train_preds
+    )
+    test_mse = mean_squared_error(
+        y_true= y_test,
+        y_pred= test_preds
+    )
+
+    ## MAE
+    train_mae = mean_absolute_error(
+        y_true= y_train,
+        y_pred= train_preds
+    )
+    test_mae = mean_absolute_error(
+        y_true= y_test,
+        y_pred= test_preds
+    )
+
+    ## R2 Score
+    train_r2s = r2_score(
+        y_true= y_train,
+        y_pred= train_preds
+    )
+    test_r2s = r2_score(
+        y_true= y_test,
+        y_pred= test_preds
+    )
+
+    regression_metrics = {
+        "train_preds": train_preds,
+        "test_preds": test_preds,
+        "test_preds_mean": np.mean(test_preds),
+        "MAE_train": train_mae,
+        "MAE_test": test_mae,
+        "RMSE_train": np.sqrt(train_mse),
+        "RMSE_test": np.sqrt(test_mse),
+        # "MSE_train": train_mse,
+        # "MSE_test": test_mse,
+        "R2_score_train": train_r2s,
+        "R2_score_test": test_r2s
+    }
+
+    return regression_metrics
+
+
 
 
