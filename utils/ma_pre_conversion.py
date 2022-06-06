@@ -20,8 +20,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline, make_pipeline
 
 from utils.utils import get_logger, get_secret
-from utils.load_config_file import load_config_paths
-from utils.preprocessing_utils import (
+from utils.load_config_file import load_config_file
+from utils.ma_preprocessing_utils import (
     get_MedAdv_data,
     get_jornaya_data,
     get_zip_enrch_data,
@@ -78,7 +78,7 @@ def get_aws_engines(secrets_path: Union[str, pathlib.Path], db_list: list):
 def get_ma_pre_conversion_data():
 
     ## Load paths from config file
-    paths = load_config_paths(config_path=PATHS_CONFIG)
+    paths = load_config_file(config_path=PATHS_CONFIG)
 
     # Get AWS Engines
     database_list = ["hc", "isc"]
@@ -148,144 +148,41 @@ def get_ma_pre_conversion_data():
     ### Transunion Data ###
 
     ## Get Transunion Data
-    # tu_data = preprocess_transunion_data(
-    #     username="rutvik_bhende",
-    #     password="0723@RutuJuly",
-    #     account="uza72979.us-east-1",
-    #     phone_numbers_list=ma_phone_nums,
-    #     first_names_list=ma_first_names,
-    #     last_names_list=ma_last_names,
-    #     save_csv=True,
-    # )
+    tu_data = preprocess_transunion_data(
+        username="rutvik_bhende",
+        password="0723@RutuJuly",
+        account="uza72979.us-east-1",
+        phone_numbers_list=ma_phone_nums,
+        first_names_list=ma_first_names,
+        last_names_list=ma_last_names,
+        save_csv=True,
+    )
 
-    # tu_data = (
-    #     tu_data.groupby(by=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"])
-    #     .first()
-    #     .reset_index()
-    # )
+    tu_data = (
+        tu_data.groupby(by=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"])
+        .first()
+        .reset_index()
+    )
 
-    # ## Merge Trandunion data with MA_POSTCONV_JORNAYA_ZIP data
-    # data = pd.merge(
-    #     data,
-    #     tu_data,
-    #     left_on=["owner_phone", "first_name", "last_name"],
-    #     right_on=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"],
-    #     how="left",
-    #     suffixes=("", "_xtu"),
-    # )
+    ## Merge Trandunion data with MA_POSTCONV_JORNAYA_ZIP data
+    data = pd.merge(
+        data,
+        tu_data,
+        left_on=["owner_phone", "first_name", "last_name"],
+        right_on=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"],
+        how="left",
+        suffixes=("", "_xtu"),
+    )
 
-    # ## Drop Duplicated Column names with "_tu" suffix
-    # duplicated_columns = [x for x in data.columns if "_xtu" in x]
-    # duplicated_columns.append("tu_PHONE_NUMBER")
-    # duplicated_columns.append("tu_FIRST_NAME")
-    # duplicated_columns.append("tu_LAST_NAME")
-    # data = data.drop(columns=duplicated_columns)
+    ## Drop Duplicated Column names with "_tu" suffix
+    duplicated_columns = [x for x in data.columns if "_xtu" in x]
+    duplicated_columns.append("tu_PHONE_NUMBER")
+    duplicated_columns.append("tu_FIRST_NAME")
+    duplicated_columns.append("tu_LAST_NAME")
+    data = data.drop(columns=duplicated_columns)
 
-    # data = data.drop_duplicates(keep="last", ignore_index=True)
+    data = data.drop_duplicates(keep="last", ignore_index=True)
 
     data.to_csv(paths["pre_conv_data_path"], index=False)
 
     return data
-
-    # ### Post-Conversion LTV Data ###
-
-    # post_conv_data = preprocess_post_conversion_ltv_data(
-    #     data_path=paths["post_conv_data_path"]
-    # )
-
-    # ## Merge MA data with Post-Conv LTV data
-    # ma_postconv = pd.merge(
-    #     ma_data,
-    #     post_conv_data,
-    #     left_on=["application_id", "policy_id"],
-    #     right_on=["post_raw_application_id", "post_raw_policy_id"],
-    #     how="left",
-    #     suffixes=("", "_xp"),
-    # )
-    # ## Drop Duplicated Column names with "_x" suffix
-    # duplicated_columns = [x for x in ma_postconv.columns if "_xp" in x]
-    # ma_postconv = ma_postconv.drop(columns=duplicated_columns)
-
-
-# if __name__ == "__main__":
-#     get_ma_pre_conversion_data()
-
-## Load Pre-Conversion MA data with Post-Conversion LTV Values
-# ma_data = pd.read_csv(data_path, low_memory=False)
-
-# ## Remove unwanted features
-# unwanted_features = [
-#     "application_id",
-#     "owner_email",
-#     "policy_id",
-#     "owner_id",
-#     "owner_phone",
-#     "pol_zip_code",
-#     "parent_application_id",
-#     "bk_product_type",
-#     "lead_id",
-#     "first_name",
-#     "last_name",
-#     "jrn_error",
-#     "tu_GROUP_ID",
-# ]
-
-# ## Remove any post-conversion data features
-# unwanted_features = unwanted_features + [
-#     p for p in ma_data.columns if "post_raw" in p.lower()
-# ]
-
-# ma_data.drop(columns=unwanted_features, inplace=True)
-
-# ## Get all the numeric features
-# numeric_ma_data = ma_data.select_dtypes(include="number")
-
-# ## Get all the categorical data
-# category_ma_data = ma_data.select_dtypes(include="object" or "category")
-
-# ## Label encoder for categorical columns data
-
-# # cate_transform = ColumnTransformer([
-# #     ('cate_label_enc', LabelEncoder(), [1,6])
-# # ], remainder='passthrough')
-
-# # lab = LabelEncoder()
-
-# # cate = lab.fit_transform(category_ma_data)
-
-# for col in ma_data.columns:
-#     if ma_data[col].dtype in ["i", "f", int, float]:
-#         ma_data[col].fillna(0, inplace=True)
-#     else:
-#         ma_data[col].fillna("N/A", inplace=True)
-
-# # numeric_ma_data.fillna(0, inplace= True)
-# # category_ma_data.fillna("N/A", inplace= True)
-
-# ## Train-Test Split
-# y = ma_data["mod_LTV"]
-# X = ma_data.drop(columns=["mod_LTV"])
-# X_train, X_test, y_train, y_test = train_test_split(
-#     X, y, test_size=0.2, random_state=0
-# )
-
-# # train_dataset = catboost.Pool(X_train, y_train)
-# # test_dataset = catboost.Pool(X_test, y_test)
-
-# model = catboost.CatBoostRegressor(
-#     iterations=50, depth=3, learning_rate=0.1, loss_function="RMSE"
-# )
-
-# model.fit(
-#     X_train,
-#     y_train,
-#     cat_features=list(category_ma_data.columns),
-#     # eval_set=(X_validation, y_validation),
-#     plot=True,
-# )
-
-# results = pd.DataFrame()
-# results["true_LTV"] = ma_data["true_LTV"]
-# results["pred_LTV"] = model.predict(X_test)
-
-# print(ma_data.shape)

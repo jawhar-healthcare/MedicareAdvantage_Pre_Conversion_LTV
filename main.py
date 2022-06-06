@@ -10,9 +10,9 @@ import logging
 import pathlib
 from logging import handlers
 from utils.utils import get_secret, get_logger, load_data
-from utils.load_config_file import load_config_paths
+from utils.load_config_file import load_config_file
 
-from utils.preprocessing_utils import get_post_conversion_data
+from utils.ma_preprocessing_utils import get_post_conversion_data
 from utils.ma_pre_conversion import get_ma_pre_conversion_data
 
 from warnings import filterwarnings
@@ -22,24 +22,24 @@ filterwarnings("ignore")
 # logging.basicConfig(level= logging.INFO)
 
 logger = get_logger(name=pathlib.Path(__file__))
-PATHS_CONFIG = "config/config.ini"
+CONFIG_PATH = "config/config.ini"
 
 
 def main():
 
     ## Load paths from config file
-    paths = load_config_paths(config_path=PATHS_CONFIG)
+    config = load_config_file(config_path=CONFIG_PATH)
 
-    preprocess_data = False
+    preprocess_data = config["preprocess_data"]
 
     if preprocess_data:
         ## MA Pre-Conversion Data
         pre_data = get_ma_pre_conversion_data()
     else:
-        pre_data = load_data(data_path=paths["pre_conv_data_path"])
+        pre_data = load_data(data_path=config["pre_conv_data_path"])
 
     ## MA Post-Conversion Data
-    post_data = get_post_conversion_data(data_path=paths["post_conv_data_path"])
+    post_data = get_post_conversion_data(data_path=config["post_conv_data_path"])
 
     ## Merge Pre-conv MA data with Post-Conv LTV data
     ma_postconv = pd.merge(
@@ -54,7 +54,9 @@ def main():
     duplicated_columns = [x for x in ma_postconv.columns if "_xp" in x]
     ma_postconv = ma_postconv.drop(columns=duplicated_columns)
 
-    ma_postconv.to_csv(paths["ma_ltv_data_path"], index=False)
+    ma_postconv.rename(columns={"post_raw_LTV calculated": "LTV"}, inplace=True)
+
+    ma_postconv.to_csv(config["ma_ltv_data_path"], index=False)
 
     print(pre_data)
 

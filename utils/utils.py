@@ -145,8 +145,8 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     )
 
     ## Predictions
-    train_preds = model.predict(X=X_train)
-    test_preds = model.predict(X=X_test)
+    train_preds = model.predict(X_train)
+    test_preds = model.predict(X_test)
 
     ## MSE
     train_mse = mean_squared_error(y_true=y_train, y_pred=train_preds)
@@ -161,8 +161,6 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     test_r2s = r2_score(y_true=y_test, y_pred=test_preds)
 
     regression_metrics = {
-        "train_preds": train_preds,
-        "test_preds": test_preds,
         "test_preds_mean": np.mean(test_preds),
         "MAE_train": train_mae,
         "MAE_test": test_mae,
