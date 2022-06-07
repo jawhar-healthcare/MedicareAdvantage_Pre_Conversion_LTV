@@ -1,0 +1,6 @@
+mlflow==1.26.0
+catboost==1.0.6
+matplotlib
+scikit-learn
+boto3==1.23
+shap==0.40.0
