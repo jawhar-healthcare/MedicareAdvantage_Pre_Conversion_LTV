@@ -12,7 +12,7 @@ from logging import handlers
 from utils.utils import get_secret, get_logger, load_data
 from utils.load_config_file import load_config_file
 
-from utils.ma_preprocessing_utils import get_post_conversion_data
+from utils.ma_preprocessing_utils import get_post_conversion_data, get_united_features
 from utils.ma_pre_conversion import get_ma_pre_conversion_data
 
 from warnings import filterwarnings
@@ -55,6 +55,10 @@ def main():
     ma_postconv = ma_postconv.drop(columns=duplicated_columns)
 
     ma_postconv.rename(columns={"post_raw_LTV calculated": "LTV"}, inplace=True)
+
+    ma_postconv = get_united_features(
+        df=ma_postconv, features_with=config["unite_features_with"]
+    )
 
     ma_postconv.to_csv(config["ma_ltv_data_path"], index=False)
 

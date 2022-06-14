@@ -161,15 +161,13 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     test_r2s = r2_score(y_true=y_test, y_pred=test_preds)
 
     regression_metrics = {
-        "test_preds_mean": np.mean(test_preds),
-        "MAE_train": train_mae,
         "MAE_test": test_mae,
-        "RMSE_train": np.sqrt(train_mse),
         "RMSE_test": np.sqrt(test_mse),
-        # "MSE_train": train_mse,
-        # "MSE_test": test_mse,
-        "R2_score_train": train_r2s,
         "R2_score_test": test_r2s,
+        "MAE_train": train_mae,
+        "RMSE_train": np.sqrt(train_mse),
+        "R2_score_train": train_r2s,
+        "test_preds_mean": np.mean(test_preds),
     }
 
     return regression_metrics

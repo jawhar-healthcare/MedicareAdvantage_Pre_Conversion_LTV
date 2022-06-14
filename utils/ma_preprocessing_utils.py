@@ -63,8 +63,6 @@ def get_MedAdv_data(engine, save_csv=False):
         fapp.owner_id,
         fapp.owner_phone,
         fapp.sk_submitted_date,
-        fapp.sk_effective_date,
-        fapp.sk_end_date,
         fapp.owner_name,
         fapp.sk_date_of_birth,
         fapp.zip_code AS app_zip_code,
@@ -114,28 +112,6 @@ def get_MedAdv_data(engine, save_csv=False):
 
     ma_data = ma_data.drop(columns="sk_submitted_date")
 
-    ## Policy Effective Date Preprocessing
-    ma_data["sk_effective_date"] = pd.to_datetime(
-        ma_data["sk_effective_date"], format="%Y%m%d", errors="coerce"
-    )
-    ma_data["effective_weekday"] = ma_data["sk_effective_date"].dt.weekday
-    ma_data["effective_day"] = ma_data["sk_effective_date"].dt.day
-    ma_data["effective_month"] = ma_data["sk_effective_date"].dt.month
-    ma_data["effective_year"] = ma_data["sk_effective_date"].dt.year
-
-    ma_data = ma_data.drop(columns="sk_effective_date")
-
-    ## Policy End Date Preprocessing
-    ma_data["sk_end_date"] = pd.to_datetime(
-        ma_data["sk_end_date"], format="%Y%m%d", errors="coerce"
-    )
-    ma_data["policy_end_weekday"] = ma_data["sk_end_date"].dt.weekday
-    ma_data["policy_end_day"] = ma_data["sk_end_date"].dt.day
-    ma_data["policy_end_month"] = ma_data["sk_end_date"].dt.month
-    ma_data["policy_end_year"] = ma_data["sk_end_date"].dt.year
-
-    ma_data = ma_data.drop(columns="sk_end_date")
-
     ## Phone numer and area code
     ma_data["owner_phone"] = ma_data["owner_phone"].apply(
         lambda x: x[:10] if x is not None and len(x) > 9 else np.nan
@@ -158,12 +134,18 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data["age_range"] = ma_data["age"].apply(lambda x: get_age_range(x))
     ma_data = ma_data.drop(columns="sk_date_of_birth")
 
+    ## Application Zip Code
     ma_data["app_zip_code"] = ma_data["app_zip_code"].where(
         ma_data["app_zip_code"].str.len() < 6, ma_data["app_zip_code"].str[:5]
     )
+    ma_data["app_zip_code"] = ma_data["app_zip_code"].fillna("N/A")
 
+    ## Policy Zip Code
     ma_data["pol_zip_code"] = ma_data["pol_zip_code"].where(
         ma_data["pol_zip_code"].str.len() < 6, ma_data["pol_zip_code"].str[:5]
+    )
+    ma_data["pol_zip_code"] = (
+        ma_data["pol_zip_code"].replace("None", "N/A").fillna("N/A")
     )
 
     if save_csv:
@@ -363,3 +345,31 @@ def preprocess_transunion_data(
         trunc_tu_data.to_csv("data/trunc_tu_data.csv", index=False)
 
     return trunc_tu_data
+
+
+def get_united_features(df: pd.DataFrame, features_with: list):
+
+    for feat in features_with:
+        common_features = [col for col in df.columns if feat in col.lower()]
+
+        if df[common_features[0]].dtype in [object, str]:
+            temp1 = df[common_features[0]].map(
+                lambda x: str(x).upper(), na_action="ignore"
+            )
+        else:
+            temp1 = df[common_features[0]]
+
+        for i in range(len(common_features) - 1):
+            if df[common_features[i + 1]].dtype in [object, str]:
+                temp2 = df[common_features[i + 1]].map(
+                    lambda x: str(x).upper(), na_action="ignore"
+                )
+                temp1 = temp1.combine_first(temp2)
+            else:
+                temp2 = df[common_features[i + 1]]
+                temp1 = temp1.combine_first(temp2)
+
+        df = df.drop(columns=common_features)
+        df[feat] = temp1
+
+    return df
