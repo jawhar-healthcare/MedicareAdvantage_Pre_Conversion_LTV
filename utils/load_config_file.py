@@ -3,6 +3,7 @@ import json
 import pathlib
 import logging
 from utils.utils import get_logger
+
 # from utils import get_logger
 
 logger = get_logger(name=pathlib.Path(__file__))
@@ -31,7 +32,7 @@ def load_config_file(config_path: str):
     config_file["training_scripts_dir"] = config_data.getpathlib(
         section, "training_scripts_dir"
     )
-
+    config_file["env_file_path"] = config_data.getpathlib(section, "env_file_path")
     config_file["secret_names_path"] = config_data.getpathlib(
         section, "secret_names_path"
     )

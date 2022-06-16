@@ -27,6 +27,7 @@ from utils.ma_preprocessing_utils import (
     get_zip_enrch_data,
     preprocess_transunion_data,
 )
+from dotenv import load_dotenv
 
 logger = get_logger(name=pathlib.Path(__file__))
 PATHS_CONFIG = "config/config.ini"
@@ -79,6 +80,9 @@ def get_ma_pre_conversion_data():
 
     ## Load paths from config file
     paths = load_config_file(config_path=PATHS_CONFIG)
+
+    ## Load .env file variables
+    load_dotenv(dotenv_path=paths["env_file_path"])
 
     # Get AWS Engines
     database_list = ["hc", "isc"]
@@ -149,9 +153,9 @@ def get_ma_pre_conversion_data():
 
     ## Get Transunion Data
     tu_data = preprocess_transunion_data(
-        username="rutvik_bhende",
-        password="0723@RutuJuly",
-        account="uza72979.us-east-1",
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
         phone_numbers_list=ma_phone_nums,
         first_names_list=ma_first_names,
         last_names_list=ma_last_names,
