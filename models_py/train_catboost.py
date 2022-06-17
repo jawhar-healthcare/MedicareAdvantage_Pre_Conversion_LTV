@@ -8,7 +8,7 @@ from catboost import CatBoostRegressor
 import shap
 import json
 import argparse
-
+import pickle
 import mlflow
 
 # import mlflow.sklearn
@@ -20,6 +20,8 @@ import matplotlib.pyplot as plt
 
 # from utils.load_config_file import load_config_file
 from utils.utils import calc_regression_metrics
+
+# from utils.load_config_file import load_config_file
 from warnings import filterwarnings
 
 filterwarnings("ignore")
@@ -29,6 +31,46 @@ logging.basicConfig(level=logging.INFO)
 
 
 CONFIG_PATH = "config/config.ini"
+
+
+def get_numeric_categorical(df: pd.DataFrame, target: str):
+    # config = load_config_file(config_path=CONFIG_PATH)
+
+    # determine categorical and numerical features
+    numerical_cols = list(df.select_dtypes(include=["int64", "float64"]).columns)
+
+    categorical_cols = list(
+        df.select_dtypes(include=["object", "string", "bool"]).columns
+    )
+
+    force_categorical = ["zip"]
+    for cat in force_categorical:
+        feats = [col for col in df.columns if cat.lower() in col.lower()]
+
+    for f in feats:
+        if f in numerical_cols:
+            numerical_cols.remove(f)
+        if f not in categorical_cols:
+            categorical_cols.append(f)
+
+    print("cate:", categorical_cols)
+    print("num:", len(numerical_cols))
+
+    predictors = list(df.columns)
+    predictors.remove(target)
+
+    ## Save training Feature names
+    features = {
+        "numeric": numerical_cols,
+        "categorical": categorical_cols,
+        "predictor": predictors,
+        "response": target,
+    }
+    with open("features.pkl", "wb+") as f:
+        pickle.dump(features, f, pickle.HIGHEST_PROTOCOL)
+    mlflow.log_artifact("features.pkl")
+
+    return numerical_cols, categorical_cols
 
 
 if __name__ == "__main__":
@@ -46,9 +88,7 @@ if __name__ == "__main__":
     parser.add_argument("--depth", type=int, default=10)
     parser.add_argument("--loss_function", type=str, default="RMSE")
     parser.add_argument("--target", type=str, default="LTV")
-    # parser.add_argument(
-    #     "--data_path", type=str, default="data/with_zcta/ma_ltv_merged.csv"
-    # )
+
     parser.add_argument(
         "--train",
         type=str,
@@ -76,25 +116,20 @@ if __name__ == "__main__":
     mlflow.set_experiment(args.experiment_name)
 
     ## Load the Dataset
-    train_data = pd.read_csv(args.train, na_filter=False, low_memory=False)
-    test_data = pd.read_csv(args.test, na_filter=False, low_memory=False)
+    train_data = pd.read_csv(args.train, low_memory=False)
+    test_data = pd.read_csv(args.test, low_memory=False)
 
-    # determine categorical and numerical features
-    numerical_cols = list(
-        train_data.select_dtypes(include=["int64", "float64"]).columns
-    )
-    # numerical_cols.remove(args.target)
+    ## Some preprocessing and get num and cat columns
+    num_cols, cat_cols = get_numeric_categorical(df=train_data, target=args.target)
 
-    categorical_cols = list(
-        train_data.select_dtypes(include=["object", "bool"]).columns
-    )
-
-    for col in numerical_cols:
+    for col in num_cols:
         train_data[col] = train_data[col].fillna(0)
         test_data[col] = test_data[col].fillna(0)
-    for col in categorical_cols:
+    for col in cat_cols:
         train_data[col] = train_data[col].fillna("N/A")
         test_data[col] = test_data[col].fillna("N/A")
+
+    num_cols.remove(args.target)
 
     ## Split Predictors and response variables
     y_train = train_data[args.target]
@@ -102,7 +137,9 @@ if __name__ == "__main__":
     X_train = train_data.drop(columns=[args.target])
     X_test = test_data.drop(columns=[args.target])
 
-    # config = load_config_file(config_path=CONFIG_PATH)
+    for cate in cat_cols:
+        X_train[cate] = X_train[cate].astype(str)
+        X_test[cate] = X_train[cate].astype(str)
 
     ## Define model parameters
     model_params = {
@@ -111,78 +148,82 @@ if __name__ == "__main__":
         "depth": args.depth,
         "loss_function": args.loss_function,
     }
-    # logging.info(categorical_cols)
 
-    with mlflow.start_run() as run:
-        mlflow.set_tag("user_arn", args.user_arn)
+    # with mlflow.start_run() as run:
+    mlflow.set_tag("user_arn", args.user_arn)
 
-        ## Initialize the CatBoost model
-        model = CatBoostRegressor(**model_params)
-        ## Train the model
-        try:
-            model.fit(X=X_train, y=y_train, cat_features=categorical_cols, verbose=0)
-            logging.info("CatBoost model is trained.")
-        except Exception as e:
-            logging.exception(f"Exception {e} occured during training CatBoost model.")
+    ## Initialize the CatBoost model
+    model = CatBoostRegressor(**model_params)
+    ## Train the model
+    try:
+        model.fit(X=X_train, y=y_train, cat_features=cat_cols, verbose=0)
+        logging.info("CatBoost model is trained.")
+    except Exception as e:
+        logging.exception(f"Exception {e} occured during training CatBoost model.")
 
-        ## Calculate Regression Metrics
-        try:
-            regr_metrics = calc_regression_metrics(
-                model=model,
-                X_train=X_train,
-                y_train=y_train,
-                X_test=X_test,
-                y_test=y_test,
-            )
-            logging.info(
-                f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
-            )
-        except Exception as e:
-            logging.exception(
-                f"Exception {e} occured during calculating regression metrics."
-            )
-        # n_feats = [20, 50]
-        # plot_types = ["dot", "bar"]
+    ## Calculate Regression Metrics
+    try:
+        regr_metrics = calc_regression_metrics(
+            model=model,
+            X_train=X_train,
+            y_train=y_train,
+            X_test=X_test,
+            y_test=y_test,
+        )
+        logging.info(
+            f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
+        )
+    except Exception as e:
+        logging.exception(
+            f"Exception {e} occured during calculating regression metrics."
+        )
+    n_feats = [50]
+    plot_types = ["dot"]
 
+    try:
         predictions = model.predict(X_test)
-        signature = infer_signature(X_test, predictions)
-        ## Log Parameters
-        mlflow.log_params(model_params)
-        ## Log Metrics
-        for key in regr_metrics:
-            logging.info(f"{key}: {regr_metrics[key]}")
-            mlflow.log_metric(f"{key}", regr_metrics[key])
+    except Exception as e:
+        print(e)
 
-        ## SHAP
-        # shap.initjs()
-        # explainer = shap.TreeExplainer(model)
-        # shap_values = explainer.shap_values(X_test)
+    signature = infer_signature(X_test, predictions)
+    ## Log Parameters
+    mlflow.log_params(model_params)
+    ## Log Metrics
+    for key in regr_metrics:
+        logging.info(f"{key}: {regr_metrics[key]}")
+        mlflow.log_metric(f"{key}", regr_metrics[key])
 
-        # for n in n_feats:
-        #     for t in plot_types:
-        #         shap.summary_plot(
-        #             shap_values,
-        #             features=X_test,
-        #             feature_names=X_test.columns,
-        #             max_display=n,
-        #             plot_type=t,
-        #             # matplotlib=True,
-        #             show=False,
-        #         )
-        #         plt.savefig(f"shap_{t}_{n}_catboost.png", dpi=150, bbox_inches="tight")
-        #         mlflow.log_artifact(f"shap_{t}_{n}_catboost.png")
-        #         plt.clf()
-        #         plt.close()
+    ## SHAP
+    shap.initjs()
+    explainer = shap.TreeExplainer(model)
+    shap_values = explainer.shap_values(X_test)
 
-        experiment = mlflow.get_experiment_by_name(args.experiment_name)
-        mlflow.sklearn.log_model(model, "model", signature=signature)
-        logging.info("Pre-Conversion MA LTV Catboost Model is saved in MLfLow.")
-        # logging.info(f"experiment_id={experiment.experiment_id}")
-        # logging.info(f"artifact_location={experiment.artifact_location}")
-        # logging.info(f"tags={experiment.tags}")
-        # logging.info(f"lifecycle_stage={experiment.lifecycle_stage}")
-        # logging.info(f"artifact_uri={mlflow.get_artifact_uri()}")
-        # logging.info(f"run_id={mlflow.active_run().info.run_id}")
+    for n in n_feats:
+        for t in plot_types:
+            shap.summary_plot(
+                shap_values,
+                features=X_test,
+                feature_names=X_test.columns,
+                max_display=n,
+                plot_type=t,
+                # matplotlib=True,
+                show=False,
+            )
+            plt.savefig(f"shap_{t}_{n}_catboost.png", dpi=150, bbox_inches="tight")
+            mlflow.log_artifact(f"shap_{t}_{n}_catboost.png")
+            plt.clf()
+            plt.close()
+
+    experiment = mlflow.get_experiment_by_name(args.experiment_name)
+    mlflow.sklearn.log_model(model, "model", signature=signature)
+
+    logging.info("Pre-Conversion MA LTV Catboost Model is saved in MLfLow.")
+    logging.info(f"experiment_id={experiment.experiment_id}")
+    logging.info(f"artifact_location={experiment.artifact_location}")
+    logging.info(f"tags={experiment.tags}")
+    logging.info(f"lifecycle_stage={experiment.lifecycle_stage}")
+    logging.info(f"artifact_uri={mlflow.get_artifact_uri()}")
+    logging.info(f"run_id={mlflow.active_run().info.run_id}")
 
     # mlflow.end_run()
-    # logging.info("done")
+    logging.info("done")
