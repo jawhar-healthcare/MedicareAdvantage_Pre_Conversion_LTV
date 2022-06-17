@@ -54,7 +54,9 @@ def main():
     duplicated_columns = [x for x in ma_postconv.columns if "_xp" in x]
     ma_postconv = ma_postconv.drop(columns=duplicated_columns)
 
-    ma_postconv.rename(columns={"post_raw_LTV calculated": "LTV"}, inplace=True)
+    ltv_feat = [feat for feat in ma_postconv.columns if "ltv" in feat.lower()][0]
+
+    ma_postconv.rename(columns={ltv_feat: "LTV"}, inplace=True)
 
     ma_postconv = get_united_features(
         df=ma_postconv, features_with=config["unite_features_with"]

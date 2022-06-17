@@ -20,25 +20,25 @@ def get_post_conversion_data(data_path: Union[str, pathlib.Path]):
     ## Load MA Post-Conversion LTV Model Predictions data
     post_conv_data = load_data(data_path=data_path)
 
-    ## Keep only relevant features from MA Post Conversion LTV Data
-    relevant_features = [
-        "application_id",
-        "policy_id",
-        "medicare_number",
-        "LTV calculated",
-        "model_predicted_duration",
-    ]
-    irrelevant_features = [
-        feat for feat in post_conv_data.columns if feat not in relevant_features
-    ]
+    # ## Keep only relevant features from MA Post Conversion LTV Data
+    # relevant_features = [
+    #     "application_id",
+    #     "policy_id",
+    #     "Predicted LTV",
+    # ]
+    # irrelevant_features = [
+    #     feat for feat in post_conv_data.columns if feat not in relevant_features
+    # ]
 
-    ## Keep only relevant columns
-    post_conv_data = post_conv_data.drop(columns=irrelevant_features)
+    # ## Keep only relevant columns
+    # post_conv_data = post_conv_data.drop(columns=irrelevant_features)
+
+    ltv_feat = [feat for feat in post_conv_data.columns if "ltv" in feat.lower()]
 
     ## Convert LTV value Strings to Floats if not
-    if post_conv_data["LTV calculated"].dtype != float:
-        post_conv_data["LTV calculated"] = (
-            post_conv_data["LTV calculated"]
+    if post_conv_data[ltv_feat].dtypes.item() != float:
+        post_conv_data[ltv_feat] = (
+            post_conv_data[ltv_feat]
             .str.replace("$", "")
             .str.replace(",", "")
             .astype(float)
