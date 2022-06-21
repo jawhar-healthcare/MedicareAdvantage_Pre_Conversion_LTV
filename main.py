@@ -45,9 +45,11 @@ def main():
     ma_postconv = pd.merge(
         pre_data,
         post_data,
-        left_on=["application_id", "policy_id"],
-        right_on=["post_raw_application_id", "post_raw_policy_id"],
-        how="left",
+        # left_on=["application_id", "policy_id"],
+        left_on=["application_id"],
+        # right_on=["post_raw_application_id", "post_raw_policy_id"],
+        right_on=["post_raw_application_id"],
+        how="right",
         suffixes=("", "_xp"),
     )
     ## Drop Duplicated Column names with "_x" suffix
@@ -65,11 +67,6 @@ def main():
     ma_postconv.to_csv(config["ma_ltv_data_path"], index=False)
 
     print(pre_data)
-
-    # # ## Modify LTV values. Replace Blanks with Zero.
-    # ma_postconv_jorn_zip_tu["mod_LTV"] = (
-    #     ma_postconv_jorn_zip_tu["post_raw_LTV"] / 1.95
-    # ).fillna(0)
 
 
 if __name__ == "__main__":

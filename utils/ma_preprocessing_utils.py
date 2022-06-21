@@ -44,6 +44,9 @@ def get_post_conversion_data(data_path: Union[str, pathlib.Path]):
             .astype(float)
         )
 
+    # policy_nulls = post_conv_data["policy_id"].fillna("not-available")
+    # post_conv_data["policy_id"] = policy_nulls
+
     ## Add a prefix "post_raw_" to all columns
     post_conv_data = post_conv_data.add_prefix("post_raw_")
 
@@ -95,6 +98,9 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data = pd.read_sql_query(text(ma_data_sql), engine)
 
     ma_data = ma_data.groupby(by="application_id").first().reset_index()
+
+    # policy_nulls = ma_data["policy_id"].fillna("not-available")
+    # ma_data["policy_id"] = policy_nulls
 
     ma_data["first_name"] = ma_data["owner_name"].apply(lambda x: x.split(" ")[0])
     ma_data["last_name"] = ma_data["owner_name"].apply(lambda x: x.split(" ")[-1])
