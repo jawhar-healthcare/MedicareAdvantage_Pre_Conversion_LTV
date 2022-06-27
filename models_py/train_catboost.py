@@ -53,8 +53,8 @@ def get_numeric_categorical(df: pd.DataFrame, target: str):
         if f not in categorical_cols:
             categorical_cols.append(f)
 
-    print("cate:", categorical_cols)
-    print("num:", len(numerical_cols))
+    # print("cate:", categorical_cols)
+    # print("num:", len(numerical_cols))
 
     predictors = list(df.columns)
     predictors.remove(target)
@@ -92,12 +92,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/ma_ltv_train.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/train_tu_jrn_null.csv",
     )
     parser.add_argument(
         "--test",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/ma_ltv_test.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/test_tu_jrn_null.csv",
     )
 
     args, _ = parser.parse_known_args()
@@ -196,8 +196,29 @@ if __name__ == "__main__":
     ## SHAP
     shap.initjs()
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X_test)
 
+    ## For train
+    shap_values = explainer.shap_values(X_train)
+    for n in n_feats:
+        for t in plot_types:
+            shap.summary_plot(
+                shap_values,
+                features=X_train,
+                feature_names=X_train.columns,
+                max_display=n,
+                plot_type=t,
+                # matplotlib=True,
+                show=False,
+            )
+            plt.savefig(f"shap_{n}_train.png", dpi=150, bbox_inches="tight")
+            mlflow.log_artifact(f"shap_{n}_train.png")
+            plt.clf()
+            plt.close()
+
+    del shap_values
+
+    ## For test
+    shap_values = explainer.shap_values(X_test)
     for n in n_feats:
         for t in plot_types:
             shap.summary_plot(
@@ -209,10 +230,11 @@ if __name__ == "__main__":
                 # matplotlib=True,
                 show=False,
             )
-            plt.savefig(f"shap_{t}_{n}_catboost.png", dpi=150, bbox_inches="tight")
-            mlflow.log_artifact(f"shap_{t}_{n}_catboost.png")
+            plt.savefig(f"shap_{n}_test.png", dpi=150, bbox_inches="tight")
+            mlflow.log_artifact(f"shap_{n}_test.png")
             plt.clf()
             plt.close()
+    del shap_values
 
     experiment = mlflow.get_experiment_by_name(args.experiment_name)
     mlflow.sklearn.log_model(model, "model", signature=signature)

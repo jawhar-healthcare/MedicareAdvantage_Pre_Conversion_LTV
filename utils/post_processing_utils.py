@@ -25,7 +25,7 @@ def process_catboost(
     unwanted_features = (
         unwanted_features
         + [p for p in data.columns if "post_raw" in p.lower()]
-        + [c for c in data.columns if len(data[c].fillna(0).unique()) == 1]
+        # + [c for c in data.columns if len(data[c].fillna(0).unique()) == 1]
     )
     data = data.drop(columns=unwanted_features)
 

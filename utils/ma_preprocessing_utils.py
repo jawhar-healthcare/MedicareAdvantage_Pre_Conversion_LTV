@@ -131,12 +131,7 @@ def get_MedAdv_data(engine, save_csv=False):
         ma_data["sk_date_of_birth"], format="%Y%m%d", errors="coerce"
     )
 
-    ma_data["age"] = ma_data["sk_date_of_birth"].apply(
-        lambda x: int(
-            (datetime.datetime.now().date() - datetime.datetime.date(x)).days / 365.2425
-        )
-    )
-
+    ma_data["age"] = ma_data["sk_date_of_birth"].apply(lambda x: get_age(x))
     ma_data["age_range"] = ma_data["age"].apply(lambda x: get_age_range(x))
     ma_data = ma_data.drop(columns="sk_date_of_birth")
 
@@ -158,6 +153,14 @@ def get_MedAdv_data(engine, save_csv=False):
         ma_data.to_csv("data/ma_data.csv", index=False)
 
     return ma_data
+
+
+def get_age(dob):
+    if pd.notna(dob):
+        age = int((datetime.now().date() - datetime.date(dob)).days / 365.2425)
+    else:
+        age = -99
+    return age
 
 
 def get_age_range(age: int or float):
