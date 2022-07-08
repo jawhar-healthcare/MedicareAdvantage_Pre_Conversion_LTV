@@ -4,6 +4,11 @@ import numpy as np
 import pandas as pd
 import pathlib
 from catboost import CatBoostRegressor
+from sklearn.metrics import (
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score,
+)
 
 import shap
 import json
@@ -60,15 +65,15 @@ def get_numeric_categorical(df: pd.DataFrame, target: str):
     predictors.remove(target)
 
     ## Save training Feature names
-    features = {
-        "numeric": numerical_cols,
-        "categorical": categorical_cols,
-        "predictor": predictors,
-        "response": target,
-    }
-    with open("features.pkl", "wb+") as f:
-        pickle.dump(features, f, pickle.HIGHEST_PROTOCOL)
-    mlflow.log_artifact("features.pkl")
+    # features = {
+    #     "numeric": numerical_cols,
+    #     "categorical": categorical_cols,
+    #     "predictor": predictors,
+    #     "response": target,
+    # }
+    # with open("features.pkl", "wb+") as f:
+    #     pickle.dump(features, f, pickle.HIGHEST_PROTOCOL)
+    # mlflow.log_artifact("features.pkl")
 
     return numerical_cols, categorical_cols
 
@@ -92,12 +97,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/train_tu_jrn_null.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/train.csv",
     )
     parser.add_argument(
         "--test",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/test_tu_jrn_null.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/test.csv",
     )
 
     args, _ = parser.parse_known_args()
@@ -137,10 +142,6 @@ if __name__ == "__main__":
     X_train = train_data.drop(columns=[args.target])
     X_test = test_data.drop(columns=[args.target])
 
-    for cate in cat_cols:
-        X_train[cate] = X_train[cate].astype(str)
-        X_test[cate] = X_train[cate].astype(str)
-
     ## Define model parameters
     model_params = {
         "iterations": args.iterations,
@@ -150,7 +151,10 @@ if __name__ == "__main__":
     }
 
     # with mlflow.start_run() as run:
+
+    ## Set Tags
     mlflow.set_tag("user_arn", args.user_arn)
+    mlflow.set_tag("Description", "Without Carrier; Loss Func: RMSEWithUncertainty")
 
     ## Initialize the CatBoost model
     model = CatBoostRegressor(**model_params)
@@ -161,80 +165,116 @@ if __name__ == "__main__":
     except Exception as e:
         logging.exception(f"Exception {e} occured during training CatBoost model.")
 
-    ## Calculate Regression Metrics
-    try:
-        regr_metrics = calc_regression_metrics(
-            model=model,
-            X_train=X_train,
-            y_train=y_train,
-            X_test=X_test,
-            y_test=y_test,
-        )
-        logging.info(
-            f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
-        )
-    except Exception as e:
-        logging.exception(
-            f"Exception {e} occured during calculating regression metrics."
-        )
     n_feats = [50]
-    plot_types = ["dot"]
-
-    try:
-        predictions = model.predict(X_test)
-    except Exception as e:
-        print(e)
-
-    signature = infer_signature(X_test, predictions)
-    ## Log Parameters
-    mlflow.log_params(model_params)
-    ## Log Metrics
-    for key in regr_metrics:
-        logging.info(f"{key}: {regr_metrics[key]}")
-        mlflow.log_metric(f"{key}", regr_metrics[key])
+    plot_types = ["bar", "dot"]
 
     ## SHAP
     shap.initjs()
     explainer = shap.TreeExplainer(model)
 
     ## For train
-    shap_values = explainer.shap_values(X_train)
-    for n in n_feats:
-        for t in plot_types:
-            shap.summary_plot(
-                shap_values,
-                features=X_train,
-                feature_names=X_train.columns,
-                max_display=n,
-                plot_type=t,
-                # matplotlib=True,
-                show=False,
-            )
-            plt.savefig(f"shap_{n}_train.png", dpi=150, bbox_inches="tight")
-            mlflow.log_artifact(f"shap_{n}_train.png")
-            plt.clf()
-            plt.close()
-
-    del shap_values
+    shap_values_tr = explainer.shap_values(X_train)
 
     ## For test
-    shap_values = explainer.shap_values(X_test)
-    for n in n_feats:
-        for t in plot_types:
-            shap.summary_plot(
-                shap_values,
-                features=X_test,
-                feature_names=X_test.columns,
-                max_display=n,
-                plot_type=t,
-                # matplotlib=True,
-                show=False,
-            )
-            plt.savefig(f"shap_{n}_test.png", dpi=150, bbox_inches="tight")
-            mlflow.log_artifact(f"shap_{n}_test.png")
-            plt.clf()
-            plt.close()
-    del shap_values
+    shap_values_ts = explainer.shap_values(X_test)
+
+    try:
+        for n in n_feats:
+            for t in plot_types:
+                ## Train
+                shap.summary_plot(
+                    shap_values_tr,
+                    features=X_train,
+                    feature_names=X_train.columns,
+                    max_display=n,
+                    plot_type=t,
+                    # matplotlib=True,
+                    show=False,
+                )
+                plt.savefig(f"shap_{n}_train.png", dpi=150, bbox_inches="tight")
+                mlflow.log_artifact(f"shap_{n}_train.png")
+                plt.clf()
+                plt.close()
+
+                ## Test
+                shap.summary_plot(
+                    shap_values_ts,
+                    features=X_test,
+                    feature_names=X_test.columns,
+                    max_display=n,
+                    plot_type=t,
+                    # matplotlib=True,
+                    show=False,
+                )
+                plt.savefig(f"shap_{n}_test.png", dpi=150, bbox_inches="tight")
+                mlflow.log_artifact(f"shap_{n}_test.png")
+                plt.clf()
+                plt.close()
+
+    except Exception as e:
+        print(e)
+    del shap_values_tr
+    del shap_values_ts
+
+    ## Predictions
+    train_preds = model.predict(X_train)
+    test_preds = model.predict(X_test)
+
+    if model_params["loss_function"].lower() == "rmsewithuncertainty":
+        ## Train Preds
+        tr_pred_stdev = train_preds[:, 1]
+        train_preds = train_preds[:, 0]
+        tr_pred_stdev = (
+            pd.DataFrame(tr_pred_stdev).apply(lambda x: np.sqrt(x)).mean()[0]
+        )
+
+        ## Test Preds
+        ts_pred_stdev = test_preds[:, 1]
+        test_preds = test_preds[:, 0]
+        ts_pred_stdev = (
+            pd.DataFrame(ts_pred_stdev).apply(lambda x: np.sqrt(x)).mean()[0]
+        )
+
+    else:
+        tr_pred_stdev = None
+        ts_pred_stdev = None
+
+    ## Calculate Regression Metrics
+    ## MSE
+    train_mse = mean_squared_error(y_true=y_train, y_pred=train_preds)
+    test_mse = mean_squared_error(y_true=y_test, y_pred=test_preds)
+
+    ## MAE
+    train_mae = mean_absolute_error(y_true=y_train, y_pred=train_preds)
+    test_mae = mean_absolute_error(y_true=y_test, y_pred=test_preds)
+
+    ## R2 Score
+    train_r2s = r2_score(y_true=y_train, y_pred=train_preds)
+    test_r2s = r2_score(y_true=y_test, y_pred=test_preds)
+
+    regr_metrics = {
+        "MAE_train": train_mae,
+        "MAE_test": test_mae,
+        "RMSE_train": np.sqrt(train_mse),
+        "RMSE_test": np.sqrt(test_mse),
+        "R2_score_train": train_r2s,
+        "R2_score_test": test_r2s,
+        "stdev_mean_train": tr_pred_stdev,
+        "stdev_mean_test": ts_pred_stdev,
+        "mean_test_preds": np.mean(test_preds),
+    }
+    # logging.info(
+    #     f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
+    # )
+
+    signature = infer_signature(X_test, test_preds)
+
+    ## Log Parameters
+    mlflow.log_params(model_params)
+    ## Log Metrics
+    for key in regr_metrics:
+        logging.info(f"{key}: {regr_metrics[key]}")
+        mlflow.log_metric(f"{key}", regr_metrics[key])
 
     experiment = mlflow.get_experiment_by_name(args.experiment_name)
     mlflow.sklearn.log_model(model, "model", signature=signature)

@@ -109,14 +109,14 @@ def get_ma_pre_conversion_data():
         data,
         jrn_data,
         left_on=["lead_id"],
-        right_on=["jrn_boberdoo_lead_id"],
+        right_on=["jrn_lead_id"],
         how="left",
         suffixes=("", "_xj"),
     )
 
     ## Drop Duplicated Column names with "_xj" suffix
     duplicated_columns = [x for x in data.columns if "_xj" in x]
-    duplicated_columns.append("jrn_boberdoo_lead_id")
+    duplicated_columns.append("jrn_lead_id")
     data = data.drop(columns=duplicated_columns)
 
     ### Zipcode Data ###
@@ -163,7 +163,7 @@ def get_ma_pre_conversion_data():
     )
 
     tu_data = (
-        tu_data.groupby(by=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"])
+        tu_data.groupby(by=["tu_phone_number", "tu_first_name", "tu_last_name"])
         .first()
         .reset_index()
     )
@@ -173,16 +173,16 @@ def get_ma_pre_conversion_data():
         data,
         tu_data,
         left_on=["owner_phone", "first_name", "last_name"],
-        right_on=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"],
+        right_on=["tu_phone_number", "tu_first_name", "tu_last_name"],
         how="left",
         suffixes=("", "_xtu"),
     )
 
     ## Drop Duplicated Column names with "_tu" suffix
     duplicated_columns = [x for x in data.columns if "_xtu" in x]
-    duplicated_columns.append("tu_PHONE_NUMBER")
-    duplicated_columns.append("tu_FIRST_NAME")
-    duplicated_columns.append("tu_LAST_NAME")
+    duplicated_columns.append("tu_phone_number")
+    duplicated_columns.append("tu_first_name")
+    duplicated_columns.append("tu_last_name")
     data = data.drop(columns=duplicated_columns)
 
     data = data.drop_duplicates(keep="last", ignore_index=True)

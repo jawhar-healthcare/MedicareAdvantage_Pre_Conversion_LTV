@@ -64,6 +64,13 @@ def main():
         df=ma_postconv, features_with=config["unite_features_with"]
     )
 
+    # ## Replace TU data
+    # tu_cols = [col for col in ma_postconv.columns if "tu_" in col]
+
+    # new_tu_data = pd.read_excel("data/tu_data_latest.xlsx")
+
+    # new_tu_data = new_tu_data[]
+
     ma_postconv.to_csv(config["ma_ltv_data_path"], index=False)
 
     print(pre_data)

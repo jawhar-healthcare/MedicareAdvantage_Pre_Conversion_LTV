@@ -138,6 +138,7 @@ def load_data(data_path: Union[str, pathlib.Path]):
 ## Calculation of performance metrics
 def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     import numpy as np
+    import pandas as pd
     from sklearn.metrics import (
         mean_squared_error,
         mean_absolute_error,
@@ -147,6 +148,18 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     ## Predictions
     train_preds = model.predict(X_train)
     test_preds = model.predict(X_test)
+
+    if train_preds.shape[1] > 1:
+        train_preds = train_preds[:, 0]
+        tr_pred_stdev = pd.DataFrame(train_preds).apply(lambda x: np.sqrt(x)).mean()[0]
+    else:
+        tr_pred_stdev = None
+
+    if test_preds.shape[1] > 1:
+        test_preds = test_preds[:, 0]
+        ts_pred_stdev = pd.DataFrame(test_preds).apply(lambda x: np.sqrt(x)).mean()[0]
+    else:
+        ts_pred_stdev = None
 
     ## MSE
     train_mse = mean_squared_error(y_true=y_train, y_pred=train_preds)
@@ -161,15 +174,15 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     test_r2s = r2_score(y_true=y_test, y_pred=test_preds)
 
     regression_metrics = {
-        "test_preds_mean": np.mean(test_preds),
         "MAE_train": train_mae,
         "MAE_test": test_mae,
         "RMSE_train": np.sqrt(train_mse),
         "RMSE_test": np.sqrt(test_mse),
-        # "MSE_train": train_mse,
-        # "MSE_test": test_mse,
         "R2_score_train": train_r2s,
         "R2_score_test": test_r2s,
+        "train_preds_mean_stdev": tr_pred_stdev,
+        "test_preds_mean_stdev": ts_pred_stdev,
+        "test_preds_mean": np.mean(test_preds),
     }
 
     return regression_metrics

@@ -1,7 +1,7 @@
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import column, text
 import numpy as np
-import datetime
+from datetime import datetime
 import pathlib
 from typing import Union
 
@@ -66,6 +66,7 @@ def get_MedAdv_data(engine, save_csv=False):
         fapp.owner_id,
         fapp.owner_phone,
         fapp.sk_submitted_date,
+        fapp.sk_effective_date,
         fapp.owner_name,
         fapp.sk_date_of_birth,
         fapp.zip_code AS app_zip_code,
@@ -116,7 +117,31 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data["submitted_month"] = ma_data["sk_submitted_date"].dt.month
     ma_data["submitted_year"] = ma_data["sk_submitted_date"].dt.year
 
-    ma_data = ma_data.drop(columns="sk_submitted_date")
+    # ma_data = ma_data.drop(columns="sk_submitted_date")
+
+    ## Policy effective Date Preprocessing
+    ma_data["sk_effective_date"] = pd.to_datetime(
+        ma_data["sk_effective_date"], format="%Y%m%d", errors="coerce"
+    )
+    # ma_data["effective_weekday"] = ma_data["sk_effective_date"].dt.weekday
+    # ma_data["effective_day"] = ma_data["sk_effective_date"].dt.day
+    # ma_data["effective_month"] = ma_data["sk_effective_date"].dt.month
+    # ma_data["effective_year"] = ma_data["sk_effective_date"].dt.year
+
+    # ma_data = ma_data.drop(columns="sk_effective_date")
+
+    # ma_data["subm_efft_days"] = (
+    #     ma_data["sk_effective_date"] - ma_data["sk_submitted_date"]
+    # )
+    # ma_data["subm_efft_days"] = ma_data["subm_efft_days"].apply(
+    #     lambda x: x.components.days if not pd.isnull(x) else np.nan
+    # )
+
+    # ma_data["subm_efft_days"] = ma_data["subm_efft_days"].apply(
+    #     lambda x: x if not pd.isnull(x) and x > 0 else 0
+    # )
+
+    ma_data = ma_data.drop(columns=["sk_submitted_date", "sk_effective_date"])
 
     ## Phone numer and area code
     ma_data["owner_phone"] = ma_data["owner_phone"].apply(
@@ -139,14 +164,14 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data["app_zip_code"] = ma_data["app_zip_code"].where(
         ma_data["app_zip_code"].str.len() < 6, ma_data["app_zip_code"].str[:5]
     )
-    ma_data["app_zip_code"] = ma_data["app_zip_code"].fillna("N/A")
+    ma_data["app_zip_code"] = ma_data["app_zip_code"].fillna("None")
 
     ## Policy Zip Code
     ma_data["pol_zip_code"] = ma_data["pol_zip_code"].where(
         ma_data["pol_zip_code"].str.len() < 6, ma_data["pol_zip_code"].str[:5]
     )
     ma_data["pol_zip_code"] = (
-        ma_data["pol_zip_code"].replace("None", "N/A").fillna("N/A")
+        ma_data["pol_zip_code"].replace("None", "N/A").fillna("None")
     )
 
     if save_csv:
@@ -180,32 +205,42 @@ def get_age_range(age: int or float):
 def get_jornaya_data(leads: list, engine, save_csv=False):
 
     jor_sql = f"""
-    WITH jornaya_trunc AS (
-    SELECT *
-    FROM tracking.jornaya_event_new
-    ),
-    boberdoo_publisher AS (
-        SELECT leadid AS lead_id,
-            product,
-            lead_created,
-            age,
-            amount,
-            state,
-            source,
-            lead_type,
-            tcpa_universal_id
-        FROM boberdoo.boberdoo
-        WHERE product = 'MEDICARE'
-        AND leadid IN {leads}
-    ) SELECT bp.lead_id AS boberdoo_lead_id,
-            bp.state,
-            bp.amount AS boberdoo_amount,
-            bp.source AS boberdoo_source,
-            bp.lead_type AS boberdoo_lead_type,
-            tje.*
-    FROM boberdoo_publisher bp
-    LEFT JOIN jornaya_trunc tje
-        ON bp.tcpa_universal_id = tje.tcpa_universal_id;
+    SELECT tje.response_audit_authentic,
+           tje.response_audit_consumer_five_minutes,
+           tje.response_audit_consumer_hour,
+           tje.response_audit_consumer_twelve_hours,
+           tje.response_audit_consumer_twelve_consumer_day,
+           tje.response_audit_consumer_week,
+           tje.response_audit_data_integrity,
+           tje.response_audit_device_five_minutes,
+           tje.response_audit_device_hour,
+           tje.response_audit_device_twelve_hours,
+           tje.response_audit_device_day,
+           tje.response_audit_device_week,
+           tje.response_audit_consumer_dupe_check,
+           tje.response_audit_entity_value,
+           tje.response_audit_ip_five_minutes,
+           tje.response_audit_ip_hour,
+           tje.response_audit_ip_twelve_hours,
+           tje.response_audit_ip_day,
+           tje.response_audit_ip_week,
+           tje.response_audit_lead_age,
+           tje.response_audit_age,
+           tje.response_audit_lead_duration,
+           tje.response_audit_duration,
+           tje.response_audit_lead_dupe_check,
+           tje.response_audit_lead_dupe,
+           tje.response_audit_lead_five_minutes,
+           tje.response_audit_lead_hour,
+           tje.response_audit_lead_twelve_hours,
+           tje.response_audit_lead_day,
+           tje.response_audit_lead_week,
+           bb.leadid AS lead_id
+    FROM tracking.jornaya_event tje
+    LEFT JOIN boberdoo.boberdoo bb
+        ON bb.tcpa_universal_id = tje.tcpa_universal_id
+    WHERE bb.product = 'MEDICARE'
+    AND leadid IN {leads};
     """
 
     jornaya = pd.read_sql_query(text(jor_sql), engine)
@@ -213,32 +248,7 @@ def get_jornaya_data(leads: list, engine, save_csv=False):
     ## Add a prefix "jrn_" to all columns
     jornaya = jornaya.add_prefix("jrn_")
 
-    jornaya = jornaya.groupby(by="jrn_boberdoo_lead_id").first().reset_index()
-
-    # ## Drop irrelevant features
-    irrelevant_features = [
-        "jrn_tracking_file_path",
-        "jrn_request_age",
-        "jrn_request_tcpa_universal_id",
-        "jrn_request_provider",
-        "jrn_request_dob",
-        "jrn_id",
-        "jrn_tcpa_universal_id",
-        "jrn_url",
-        "jrn_request_f_name",
-        "jrn_request_l_name",
-        "jrn_request_email",
-        "jrn_request_phone1",
-        "jrn_request_address1",
-        "jrn_response_audit_token",
-    ]
-
-    ## Remove any zip feats
-    irrelevant_features = [z for z in jornaya.columns if "zip" in z.lower()] + [
-        z for z in jornaya.columns if z.endswith("rule")
-    ]
-
-    jornaya = jornaya.drop(columns=irrelevant_features)
+    jornaya = jornaya.groupby(by="jrn_lead_id").first().reset_index()
 
     if save_csv:
         jornaya.to_csv("data/jornaya.csv", index=False)
@@ -262,7 +272,7 @@ def get_zip_enrch_data(engine, save_csv=False):
     return zip_
 
 
-def load_transunion_data(username: str, password: str, account: str):
+def load_transunion_data(phones: list, username: str, password: str, account: str):
     """
     Loads the TransUnion data from the Snowflake Data Warehouse
     using the user specified credentials.
@@ -276,11 +286,28 @@ def load_transunion_data(username: str, password: str, account: str):
     )
     cursor = connect.cursor()
 
-    query_string = """
-        select *,
+    query_string = f"""
+    SELECT FIRST_NAME,
+        LAST_NAME,
+        PHONE_NUMBER,
+        ZIP,
+        CITY,
+        STATE,
         SCORES[0][2]::FLOAT AS contact_score,
-        SCORES[1][2]::FLOAT AS credit_score 
-        from PROD_STAGE.WEB_TRACKING.INTERNAL_TRANSUNION_EVENT
+        SCORES[1][2]::FLOAT AS credit_score,
+        DEMO_AGE_YEARS,
+        DEMO_INCOME_DOLLARS,
+        DEMO_CHILDREN_YES,
+        DEMO_CHILDREN_NO,
+        DEMO_AFFILIATION_CONSERVATIVE,
+        DEMO_AFFILIATION_LIBERAL,
+        DEMO_EDUCATION_YEARS,
+        DEMO_HOMEOWNER_YES,
+        DEMO_HOMEOWNER_NO,
+        DEMO_HOMEVALUE_DOLLARS,
+        DEMO_RESIDENT_YEARS,
+        DEMO_OCCUPATION_FIRST
+    FROM PROD_STAGE.TRACKING.INTERNAL_TRANSUNION_EVENT;
     """
     cursor.execute(query_string)
 
@@ -301,7 +328,7 @@ def preprocess_transunion_data(
     """ """
     # Load TU Data
     tu_data = load_transunion_data(
-        username=username, password=password, account=account
+        phones=phone_numbers_list, username=username, password=password, account=account
     )
 
     # Change Case of Name Strings in TU DataFrame
@@ -319,35 +346,39 @@ def preprocess_transunion_data(
     ## Add a prefix "tu_" to all columns
     trunc_tu_data = trunc_tu_data.add_prefix("tu_")
 
-    ## Drop irrelevant features
-    irrelevant_features = [
-        "tu_REQUEST",
-        "tu_EMAIL",
-        "tu_DATA_INPUT",
-        "tu_DOB",
-        "tu_DEMO_AGE_YEARS",
-        "tu_ADDRESS",
-        # "tu_STATE",
-        "tu_STATUS_ID",
-        "tu_STATUS_RESULT",
-        "tu_MESSAGES",
-        "tu_SCORES",
-        "tu_API",
-        "tu_SESSION_ID",
-        "tu_TRACKING_DATE",
-    ]
+    # ## Drop irrelevant features
+    # irrelevant_features = [
+    #     "tu_REQUEST",
+    #     "tu_EMAIL",
+    #     "tu_DATA_INPUT",
+    #     "tu_DOB",
+    #     "tu_DEMO_AGE_YEARS",
+    #     "tu_ADDRESS",
+    #     # "tu_STATE",
+    #     "tu_STATUS_ID",
+    #     "tu_STATUS_RESULT",
+    #     "tu_MESSAGES",
+    #     "tu_SCORES",
+    #     "tu_API",
+    #     "tu_SESSION_ID",
+    #     "tu_TRACKING_DATE",
+    # ]
 
-    ## Remove any irrelevant features
-    irrelevant_features = (
-        irrelevant_features
-        + [t for t in trunc_tu_data.columns if "verify" in t.lower()]
-        + [t for t in trunc_tu_data.columns if "match" in t.lower()]
-    )
+    # ## Remove any irrelevant features
+    # irrelevant_features = (
+    #     irrelevant_features
+    #     + [t for t in trunc_tu_data.columns if "verify" in t.lower()]
+    #     + [t for t in trunc_tu_data.columns if "match" in t.lower()]
+    # )
 
-    trunc_tu_data = trunc_tu_data.drop(columns=irrelevant_features)
+    # trunc_tu_data = trunc_tu_data.drop(columns=irrelevant_features)
 
     trunc_tu_data["tu_ZIP"] = trunc_tu_data["tu_ZIP"].where(
         trunc_tu_data["tu_ZIP"].str.len() < 6, trunc_tu_data["tu_ZIP"].str[:5]
+    )
+
+    trunc_tu_data.rename(
+        columns={c: c.lower() for c in trunc_tu_data.columns}, inplace=True
     )
 
     if save_csv:
