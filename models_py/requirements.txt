@@ -8,3 +8,4 @@ shap
 lightgbm
 fsspec
 s3fs
+fastparquet
