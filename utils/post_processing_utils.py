@@ -21,6 +21,8 @@ def process_catboost(
 
     ## Remove unwanted features
     unwanted_features = config["unwanted_features"]
+    # print(unwanted_features)
+    # unwanted_features = [f for f in unwanted_features if f is not "Null"]
     ## Remove any post-conversion data features; replace nulls with 0 or N/A
     unwanted_features = (
         unwanted_features

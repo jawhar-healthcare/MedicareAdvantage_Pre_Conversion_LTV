@@ -1,11 +1,11 @@
 import pandas as pd
 from sqlalchemy import column, text
 import numpy as np
-from datetime import datetime
+from datetime import date, datetime
 import pathlib
 from typing import Union
 
-from utils.utils import load_data
+from utils.utils import load_data, get_age, get_age_range
 
 from snowflake.sqlalchemy import URL
 import snowflake.connector
@@ -66,7 +66,6 @@ def get_MedAdv_data(engine, save_csv=False):
         fapp.owner_id,
         fapp.owner_phone,
         fapp.sk_submitted_date,
-        fapp.sk_effective_date,
         fapp.owner_name,
         fapp.sk_date_of_birth,
         fapp.zip_code AS app_zip_code,
@@ -112,36 +111,23 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data["sk_submitted_date"] = pd.to_datetime(
         ma_data["sk_submitted_date"], format="%Y%m%d", errors="coerce"
     )
-    ma_data["submitted_weekday"] = ma_data["sk_submitted_date"].dt.weekday
-    ma_data["submitted_day"] = ma_data["sk_submitted_date"].dt.day
-    ma_data["submitted_month"] = ma_data["sk_submitted_date"].dt.month
-    ma_data["submitted_year"] = ma_data["sk_submitted_date"].dt.year
+    ma_data["interaction_weekday"] = ma_data["sk_submitted_date"].dt.weekday
+    ma_data["interaction_day"] = ma_data["sk_submitted_date"].dt.day
+    ma_data["interaction_month"] = ma_data["sk_submitted_date"].dt.month
+    # ma_data["submitted_year"] = ma_data["sk_submitted_date"].dt.year
 
-    # ma_data = ma_data.drop(columns="sk_submitted_date")
-
-    ## Policy effective Date Preprocessing
-    ma_data["sk_effective_date"] = pd.to_datetime(
-        ma_data["sk_effective_date"], format="%Y%m%d", errors="coerce"
+    ma_data["OEP"] = ma_data["sk_submitted_date"].apply(
+        lambda x: get_enrollment_periods(date=x, period="OEP")
     )
-    # ma_data["effective_weekday"] = ma_data["sk_effective_date"].dt.weekday
-    # ma_data["effective_day"] = ma_data["sk_effective_date"].dt.day
-    # ma_data["effective_month"] = ma_data["sk_effective_date"].dt.month
-    # ma_data["effective_year"] = ma_data["sk_effective_date"].dt.year
+    ma_data["MA_OEP"] = ma_data["sk_submitted_date"].apply(
+        lambda x: get_enrollment_periods(date=x, period="MA_OEP")
+    )
 
-    # ma_data = ma_data.drop(columns="sk_effective_date")
+    ma_data["SEP"] = ma_data["sk_submitted_date"].apply(
+        lambda x: get_enrollment_periods(date=x, period="SEP")
+    )
 
-    # ma_data["subm_efft_days"] = (
-    #     ma_data["sk_effective_date"] - ma_data["sk_submitted_date"]
-    # )
-    # ma_data["subm_efft_days"] = ma_data["subm_efft_days"].apply(
-    #     lambda x: x.components.days if not pd.isnull(x) else np.nan
-    # )
-
-    # ma_data["subm_efft_days"] = ma_data["subm_efft_days"].apply(
-    #     lambda x: x if not pd.isnull(x) and x > 0 else 0
-    # )
-
-    ma_data = ma_data.drop(columns=["sk_submitted_date", "sk_effective_date"])
+    ma_data = ma_data.drop(columns="sk_submitted_date")
 
     ## Phone numer and area code
     ma_data["owner_phone"] = ma_data["owner_phone"].apply(
@@ -180,26 +166,31 @@ def get_MedAdv_data(engine, save_csv=False):
     return ma_data
 
 
-def get_age(dob):
-    if pd.notna(dob):
-        age = int((datetime.now().date() - datetime.date(dob)).days / 365.2425)
-    else:
-        age = -99
-    return age
+def get_enrollment_periods(date: datetime, period: str):
 
+    if period.lower() == "oep":
+        oep = 0
+        start = datetime(date.year, 10, 15)
+        end = datetime(date.year, 12, 7)
+        if start <= date <= end:
+            oep = 1
+        return int(oep)
 
-def get_age_range(age: int or float):
-    if age < 65:
-        age_s = "Less than 65"
-    elif age >= 65 and age < 75:
-        age_s = "65 to 75"
-    elif age >= 75 and age < 85:
-        age_s = "75 to 85"
-    elif age >= 85:
-        age_s = "More than 85"
-    else:
-        age_s = "Undefined"
-    return age_s
+    if period.lower() == "ma_oep":
+        ma_oep = 0
+        start = datetime(date.year, 1, 1)
+        end = datetime(date.year, 3, 31)
+        if start <= date <= end:
+            ma_oep = 1
+        return int(ma_oep)
+
+    if period.lower() == "sep":
+        sep = 0
+        start = datetime(date.year, 4, 1)
+        end = datetime(date.year, 10, 14)
+        if start <= date <= end:
+            sep = 1
+        return int(sep)
 
 
 def get_jornaya_data(leads: list, engine, save_csv=False):
@@ -256,20 +247,62 @@ def get_jornaya_data(leads: list, engine, save_csv=False):
     return jornaya
 
 
-def get_zip_enrch_data(engine, save_csv=False):
+def get_zip_data(username: str, password: str, account: str, save_csv=False):
 
-    zip_sql = """
-    SELECT * FROM data_science.zcta_data;
+    connect = snowflake.connector.connect(
+        user=username, password=password, account=account
+    )
+    cursor = connect.cursor()
+
+    query_str = """
+    SELECT * FROM PROD_STAGE.LEAD_INFO_VALIDATION.ZCTA_MASTER;
     """
-    zip_ = pd.read_sql_query(text(zip_sql), engine)
+    cursor.execute(query_str)
+    zip_data = cursor.fetch_pandas_all()
 
-    ## Add a prefix "zip_" to all columns
-    zip_ = zip_.add_prefix("zcta_")
+    zip_data.drop(columns=["DB_CREATION_DATE_TIME"], inplace=True)
+
+    zip_data = zip_data.add_prefix("ZCTA_")
+
+    zip_data = zip_data.rename(columns={c: c.lower() for c in zip_data.columns})
 
     if save_csv:
-        zip_.to_csv("data/zcta.csv", index=False)
+        zip_data.to_csv("data/zcta.csv", index=False)
 
-    return zip_
+    return zip_data
+
+
+def get_county_city_data(username: str, password: str, account: str):
+
+    connect = snowflake.connector.connect(
+        user=username, password=password, account=account
+    )
+    cursor = connect.cursor()
+
+    query_str = """
+    SELECT ztzc.ZCTA,
+        ztzc.PO_NAME AS CITY,
+        ztzc.STATE,
+        zcr.FIPS,
+        cm.COUNTY
+    FROM PROD_STAGE.LEAD_INFO_VALIDATION.ZIPTOZCTA_CROSSWALK ztzc
+        LEFT JOIN PROD_STAGE.LEAD_INFO_VALIDATION.ZCTA_COUNTY_RELATIONSHIP zcr
+            ON ztzc.ZCTA = zcr.ZCTA
+        INNER JOIN PROD_STAGE.LEAD_INFO_VALIDATION.COUNTY_MASTER cm
+            ON zcr.FIPS = cm.FIPS;
+    """
+    cursor.execute(query_str)
+    county_city = cursor.fetch_pandas_all()
+
+    county_city = county_city.rename(
+        columns={c: c.lower() for c in county_city.columns}
+    )
+
+    county_city["county"] = county_city["county"].apply(
+        lambda x: x.replace(" County", "")
+    )
+
+    return county_city
 
 
 def load_transunion_data(phones: list, username: str, password: str, account: str):
@@ -345,33 +378,6 @@ def preprocess_transunion_data(
 
     ## Add a prefix "tu_" to all columns
     trunc_tu_data = trunc_tu_data.add_prefix("tu_")
-
-    # ## Drop irrelevant features
-    # irrelevant_features = [
-    #     "tu_REQUEST",
-    #     "tu_EMAIL",
-    #     "tu_DATA_INPUT",
-    #     "tu_DOB",
-    #     "tu_DEMO_AGE_YEARS",
-    #     "tu_ADDRESS",
-    #     # "tu_STATE",
-    #     "tu_STATUS_ID",
-    #     "tu_STATUS_RESULT",
-    #     "tu_MESSAGES",
-    #     "tu_SCORES",
-    #     "tu_API",
-    #     "tu_SESSION_ID",
-    #     "tu_TRACKING_DATE",
-    # ]
-
-    # ## Remove any irrelevant features
-    # irrelevant_features = (
-    #     irrelevant_features
-    #     + [t for t in trunc_tu_data.columns if "verify" in t.lower()]
-    #     + [t for t in trunc_tu_data.columns if "match" in t.lower()]
-    # )
-
-    # trunc_tu_data = trunc_tu_data.drop(columns=irrelevant_features)
 
     trunc_tu_data["tu_ZIP"] = trunc_tu_data["tu_ZIP"].where(
         trunc_tu_data["tu_ZIP"].str.len() < 6, trunc_tu_data["tu_ZIP"].str[:5]

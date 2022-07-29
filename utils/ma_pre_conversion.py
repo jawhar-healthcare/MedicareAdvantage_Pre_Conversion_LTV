@@ -5,6 +5,7 @@ import pandas as pd
 import pathlib
 import boto3
 import json
+from scipy.fftpack import cc_diff
 from sqlalchemy import create_engine, text
 import psycopg2
 from typing import Optional, Tuple, Union
@@ -24,7 +25,8 @@ from utils.load_config_file import load_config_file
 from utils.ma_preprocessing_utils import (
     get_MedAdv_data,
     get_jornaya_data,
-    get_zip_enrch_data,
+    get_zip_data,
+    get_county_city_data,
     preprocess_transunion_data,
 )
 from dotenv import load_dotenv
@@ -121,8 +123,13 @@ def get_ma_pre_conversion_data():
 
     ### Zipcode Data ###
 
-    ## Get Zipcode Enriched Data
-    zip_data = get_zip_enrch_data(engine=aws_engines["hc"], save_csv=True)
+    ## Get Zipcode ZCTA Data
+    zip_data = get_zip_data(
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
+        save_csv=True,
+    )
 
     zip_data = zip_data.groupby(by="zcta_zcta").first().reset_index()
 
@@ -141,7 +148,29 @@ def get_ma_pre_conversion_data():
     duplicated_columns.append("zcta_zcta")
     data = data.drop(columns=duplicated_columns)
 
-    ## Some preprocessing on merged dataset
+    # ## GET COUNTY-CITY DATA
+    cc_data = get_county_city_data(
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
+    )
+
+    cc_data = cc_data.groupby(by="zcta").first().reset_index()
+
+    data = pd.merge(
+        data,
+        cc_data,
+        left_on=["app_zip_code"],
+        right_on=["zcta"],
+        how="left",
+        suffixes=("", "_xcc"),
+    )
+    ## Drop Duplicated Column names with "_xcc" suffix
+    duplicated_columns = [x for x in data.columns if "_xcc" in x]
+    duplicated_columns.append("zcta")
+    data = data.drop(columns=duplicated_columns)
+
+    # ## Some preprocessing on merged dataset
     data["first_name"] = data["first_name"].str.lower()
     data["last_name"] = data["last_name"].str.lower()
 

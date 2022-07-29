@@ -135,6 +135,31 @@ def load_data(data_path: Union[str, pathlib.Path]):
     return data
 
 
+def get_age(dob):
+    import pandas as pd
+    from datetime import datetime
+
+    if pd.notna(dob):
+        age = int((datetime.now().date() - datetime.date(dob)).days / 365.2425)
+    else:
+        age = -99
+    return age
+
+
+def get_age_range(age: int or float):
+    if 0 <= age < 65:
+        age_s = "Less than 65"
+    elif 65 <= age < 75:
+        age_s = "65 to 75"
+    elif 75 <= age < 85:
+        age_s = "75 to 85"
+    elif age >= 85:
+        age_s = "More than 85"
+    else:
+        age_s = "Undefined"
+    return age_s
+
+
 ## Calculation of performance metrics
 def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     import numpy as np
@@ -150,14 +175,20 @@ def calc_regression_metrics(model, X_train, y_train, X_test, y_test):
     test_preds = model.predict(X_test)
 
     if train_preds.shape[1] > 1:
+        ## Train Preds
+        tr_pred_stdev = (
+            pd.DataFrame(train_preds[:, 1]).apply(lambda x: np.sqrt(x)).mean()[0]
+        )
         train_preds = train_preds[:, 0]
-        tr_pred_stdev = pd.DataFrame(train_preds).apply(lambda x: np.sqrt(x)).mean()[0]
     else:
         tr_pred_stdev = None
 
     if test_preds.shape[1] > 1:
+        ## Test Preds
+        ts_pred_stdev = (
+            pd.DataFrame(test_preds[:, 1]).apply(lambda x: np.sqrt(x)).mean()[0]
+        )
         test_preds = test_preds[:, 0]
-        ts_pred_stdev = pd.DataFrame(test_preds).apply(lambda x: np.sqrt(x)).mean()[0]
     else:
         ts_pred_stdev = None
 

@@ -45,6 +45,10 @@ def load_config_file(config_path: str):
     config_file["ma_ltv_data_path"] = config_data.getpathlib(
         section, "ma_ltv_data_path"
     )
+    config_file["path_to_synthetic_data"] = config_data.getpathlib(
+        section, "path_to_synthetic_data"
+    )
+
     config_file["train_data_path"] = config_data.getpathlib(section, "train_data_path")
     config_file["test_data_path"] = config_data.getpathlib(section, "test_data_path")
 
