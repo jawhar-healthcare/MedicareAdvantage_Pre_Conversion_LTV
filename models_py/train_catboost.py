@@ -1,4 +1,5 @@
 from ast import arg
+from cmath import isnan
 import logging
 import numpy as np
 import pandas as pd
@@ -38,42 +39,23 @@ logging.basicConfig(level=logging.INFO)
 CONFIG_PATH = "config/config.ini"
 
 
-def get_numeric_categorical(df: pd.DataFrame, target: str):
+## Function to get Numeric and Categoric Variables
+def get_numeric_categorical(df: pd.DataFrame):
     # config = load_config_file(config_path=CONFIG_PATH)
-
     # determine categorical and numerical features
-    numerical_cols = list(df.select_dtypes(include=["int64", "float64"]).columns)
-
+    numerical_cols = list(df.select_dtypes(include=["int", "float"]).columns)
     categorical_cols = list(
         df.select_dtypes(include=["object", "string", "bool"]).columns
     )
-
     force_categorical = ["zip"]
     for cat in force_categorical:
         feats = [col for col in df.columns if cat.lower() in col.lower()]
 
     for f in feats:
-        if f in numerical_cols:
-            numerical_cols.remove(f)
         if f not in categorical_cols:
             categorical_cols.append(f)
-
-    # print("cate:", categorical_cols)
-    # print("num:", len(numerical_cols))
-
-    predictors = list(df.columns)
-    predictors.remove(target)
-
-    ## Save training Feature names
-    # features = {
-    #     "numeric": numerical_cols,
-    #     "categorical": categorical_cols,
-    #     "predictor": predictors,
-    #     "response": target,
-    # }
-    # with open("features.pkl", "wb+") as f:
-    #     pickle.dump(features, f, pickle.HIGHEST_PROTOCOL)
-    # mlflow.log_artifact("features.pkl")
+        if f in numerical_cols:
+            numerical_cols.remove(f)
 
     return numerical_cols, categorical_cols
 
@@ -84,25 +66,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tracking_uri", type=str, default="https://mlflow.healthcare.com/"
     )
-    parser.add_argument("--experiment_name", type=str, default="rb_test1")
+    parser.add_argument("--experiment_name", type=str, default="rb_test2")
     parser.add_argument("--user_arn", type=str, default="rbhende")
 
     # hyperparameters sent by the client are passed as command-line arguments to the script.
     parser.add_argument("--iterations", type=int, default=500)
-    parser.add_argument("--learning_rate", type=float, default=0.01)
-    parser.add_argument("--depth", type=int, default=10)
+    parser.add_argument("--learning_rate", type=float, default=0.1)
+    parser.add_argument("--depth", type=int, default=11)
     parser.add_argument("--loss_function", type=str, default="RMSE")
     parser.add_argument("--target", type=str, default="LTV")
 
     parser.add_argument(
         "--train",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/train.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/latest/synth_ma_train_carr.parquet",
     )
     parser.add_argument(
         "--test",
         type=str,
-        default="s3://hc-data-science/pre-conversion-ma-ltv/data/post-processed/test.csv",
+        default="s3://hc-data-science/pre-conversion-ma-ltv/data/latest/ma_test_carr.parquet",
     )
 
     args, _ = parser.parse_known_args()
@@ -120,16 +102,33 @@ if __name__ == "__main__":
     mlflow.set_tracking_uri(args.tracking_uri)
     mlflow.set_experiment(args.experiment_name)
 
-    ## Load the Dataset
-    train_data = pd.read_csv(args.train, low_memory=False)
-    test_data = pd.read_csv(args.test, low_memory=False)
+    # ## Load the Dataset
+    # train_data = pd.read_csv(args.train, low_memory=False)
+    # test_data = pd.read_csv(args.test, low_memory=False)
+    train_data = pd.read_parquet(args.train)
+    test_data = pd.read_parquet(args.test)
 
     ## Some preprocessing and get num and cat columns
-    num_cols, cat_cols = get_numeric_categorical(df=train_data, target=args.target)
+    num_cols, cat_cols = get_numeric_categorical(df=train_data)
+
+    # zip_feature = [col for col in train_data.columns if "zip" in col.lower()]
+    # ## Change DType of zip feature
+    # train_data[zip_feature] = pd.Series(
+    #     train_data[zip_feature],
+    #     # [int(float(x)) if not pd.isna(x) else np.nan for x in train_data[zip_feature]],
+    #     # name="zip",
+    #     dtype="str",
+    # )
+    # test_data[zip_feature] = pd.Series(
+    #     test_data[zip_feature],
+    #     # [int(float(x)) if not pd.isna(x) else np.nan for x in test_data[zip_feature]],
+    #     # name=zip_feature,
+    #     dtype="str",
+    # )
 
     for col in num_cols:
-        train_data[col] = train_data[col].fillna(0)
-        test_data[col] = test_data[col].fillna(0)
+        train_data[col] = train_data[col].fillna(-99)
+        test_data[col] = test_data[col].fillna(-99)
     for col in cat_cols:
         train_data[col] = train_data[col].fillna("N/A")
         test_data[col] = test_data[col].fillna("N/A")
@@ -150,11 +149,12 @@ if __name__ == "__main__":
         "loss_function": args.loss_function,
     }
 
-    # with mlflow.start_run() as run:
-
     ## Set Tags
     mlflow.set_tag("user_arn", args.user_arn)
-    mlflow.set_tag("Description", "Without Carrier; Loss Func: RMSEWithUncertainty")
+    mlflow.set_tag("Description", "With Carrier; Tr: CMS+ISC; Ts: ISC")
+
+    # with mlflow.start_run() as run:
+    experiment = mlflow.get_experiment_by_name(args.experiment_name)
 
     ## Initialize the CatBoost model
     model = CatBoostRegressor(**model_params)
@@ -166,14 +166,14 @@ if __name__ == "__main__":
         logging.exception(f"Exception {e} occured during training CatBoost model.")
 
     n_feats = [50]
-    plot_types = ["bar", "dot"]
+    plot_types = ["bar"]
 
     ## SHAP
     shap.initjs()
     explainer = shap.TreeExplainer(model)
 
     ## For train
-    shap_values_tr = explainer.shap_values(X_train)
+    # shap_values_tr = explainer.shap_values(X_train)
 
     ## For test
     shap_values_ts = explainer.shap_values(X_test)
@@ -181,21 +181,6 @@ if __name__ == "__main__":
     try:
         for n in n_feats:
             for t in plot_types:
-                ## Train
-                shap.summary_plot(
-                    shap_values_tr,
-                    features=X_train,
-                    feature_names=X_train.columns,
-                    max_display=n,
-                    plot_type=t,
-                    # matplotlib=True,
-                    show=False,
-                )
-                plt.savefig(f"shap_{n}_train.png", dpi=150, bbox_inches="tight")
-                mlflow.log_artifact(f"shap_{n}_train.png")
-                plt.clf()
-                plt.close()
-
                 ## Test
                 shap.summary_plot(
                     shap_values_ts,
@@ -211,32 +196,46 @@ if __name__ == "__main__":
                 plt.clf()
                 plt.close()
 
+                # ## Train
+                # shap.summary_plot(
+                #     shap_values_tr,
+                #     features=X_train,
+                #     feature_names=X_train.columns,
+                #     max_display=n,
+                #     plot_type=t,
+                #     # matplotlib=True,
+                #     show=False,
+                # )
+                # plt.savefig(f"shap_{n}_train.png", dpi=150, bbox_inches="tight")
+                # mlflow.log_artifact(f"shap_{n}_train.png")
+                # plt.clf()
+                # plt.close()
+
     except Exception as e:
         print(e)
-    del shap_values_tr
+    # del shap_values_tr
     del shap_values_ts
 
     ## Predictions
     train_preds = model.predict(X_train)
     test_preds = model.predict(X_test)
 
-    if model_params["loss_function"].lower() == "rmsewithuncertainty":
+    if train_preds.shape[1] > 1:
         ## Train Preds
-        tr_pred_stdev = train_preds[:, 1]
-        train_preds = train_preds[:, 0]
         tr_pred_stdev = (
-            pd.DataFrame(tr_pred_stdev).apply(lambda x: np.sqrt(x)).mean()[0]
+            pd.DataFrame(train_preds[:, 1]).apply(lambda x: np.sqrt(x)).mean()[0]
         )
-
-        ## Test Preds
-        ts_pred_stdev = test_preds[:, 1]
-        test_preds = test_preds[:, 0]
-        ts_pred_stdev = (
-            pd.DataFrame(ts_pred_stdev).apply(lambda x: np.sqrt(x)).mean()[0]
-        )
-
+        train_preds = train_preds[:, 0]
     else:
         tr_pred_stdev = None
+
+    if test_preds.shape[1] > 1:
+        ## Test Preds
+        ts_pred_stdev = (
+            pd.DataFrame(test_preds[:, 1]).apply(lambda x: np.sqrt(x)).mean()[0]
+        )
+        test_preds = test_preds[:, 0]
+    else:
         ts_pred_stdev = None
 
     ## Calculate Regression Metrics
@@ -263,9 +262,9 @@ if __name__ == "__main__":
         "stdev_mean_test": ts_pred_stdev,
         "mean_test_preds": np.mean(test_preds),
     }
-    # logging.info(
-    #     f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
-    # )
+    logging.info(
+        f"Regression model preformance metrics are: {json.dumps(regr_metrics)}"
+    )
 
     signature = infer_signature(X_test, test_preds)
 
@@ -276,7 +275,6 @@ if __name__ == "__main__":
         logging.info(f"{key}: {regr_metrics[key]}")
         mlflow.log_metric(f"{key}", regr_metrics[key])
 
-    experiment = mlflow.get_experiment_by_name(args.experiment_name)
     mlflow.sklearn.log_model(model, "model", signature=signature)
 
     logging.info("Pre-Conversion MA LTV Catboost Model is saved in MLfLow.")
