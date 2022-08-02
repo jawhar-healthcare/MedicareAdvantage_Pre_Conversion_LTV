@@ -16,23 +16,24 @@ filterwarnings("ignore")
 
 
 def get_post_conversion_data(data_path: Union[str, pathlib.Path]):
+    """
+    Load the post-conversion MA LTV data with all the Application IDs
+    and the corresponding LTV values.
+    The LTV values from this dataset will be used as the response variable
+    for training the Pre-conversion models.
+    Also, apply some minor preprocessing to this dataset.
+
+    Args:
+        data_path: Path to the post-conversion dataset.
+
+    Returns:
+        Post-conversion dataset.
+    """
 
     ## Load MA Post-Conversion LTV Model Predictions data
     post_conv_data = load_data(data_path=data_path)
 
-    # ## Keep only relevant features from MA Post Conversion LTV Data
-    # relevant_features = [
-    #     "application_id",
-    #     "policy_id",
-    #     "Predicted LTV",
-    # ]
-    # irrelevant_features = [
-    #     feat for feat in post_conv_data.columns if feat not in relevant_features
-    # ]
-
-    # ## Keep only relevant columns
-    # post_conv_data = post_conv_data.drop(columns=irrelevant_features)
-
+    ## Get the LTV column from the list of columns
     ltv_feat = [feat for feat in post_conv_data.columns if "ltv" in feat.lower()]
 
     ## Convert LTV value Strings to Floats if not
@@ -44,10 +45,7 @@ def get_post_conversion_data(data_path: Union[str, pathlib.Path]):
             .astype(float)
         )
 
-    # policy_nulls = post_conv_data["policy_id"].fillna("not-available")
-    # post_conv_data["policy_id"] = policy_nulls
-
-    ## Add a prefix "post_raw_" to all columns
+    ## Add a prefix "post_raw_" to all Post-Conversion Feature columns
     post_conv_data = post_conv_data.add_prefix("post_raw_")
 
     post_conv_data = post_conv_data.drop_duplicates(keep="last", ignore_index=True)
@@ -56,7 +54,19 @@ def get_post_conversion_data(data_path: Union[str, pathlib.Path]):
 
 
 def get_MedAdv_data(engine, save_csv=False):
+    """
+    Load the Applications Data from ISC datamart using the AWS Redshift
+    engine and the specified SQL Query and apply data preprocessing on
+    some features.
+    The query extracts dataset containing only the Pre-converison features.
 
+    Args:
+        engine: AWS Redshift engine to download data with using the Query.
+        save_csv: Boolean to specify file saving
+
+    Returns:
+        MA ISC dataset.
+    """
     ma_data_sql = """
     SELECT
         fapp.application_id,
@@ -99,15 +109,12 @@ def get_MedAdv_data(engine, save_csv=False):
 
     ma_data = ma_data.groupby(by="application_id").first().reset_index()
 
-    # policy_nulls = ma_data["policy_id"].fillna("not-available")
-    # ma_data["policy_id"] = policy_nulls
-
     ma_data["first_name"] = ma_data["owner_name"].apply(lambda x: x.split(" ")[0])
     ma_data["last_name"] = ma_data["owner_name"].apply(lambda x: x.split(" ")[-1])
 
     ma_data.drop(columns=["owner_name"], inplace=True)
 
-    ## Application Submitted Date Preprocessing
+    ## Application Submitted / Customer First Interaction Date Processing
     ma_data["sk_submitted_date"] = pd.to_datetime(
         ma_data["sk_submitted_date"], format="%Y%m%d", errors="coerce"
     )
@@ -116,13 +123,16 @@ def get_MedAdv_data(engine, save_csv=False):
     ma_data["interaction_month"] = ma_data["sk_submitted_date"].dt.month
     # ma_data["submitted_year"] = ma_data["sk_submitted_date"].dt.year
 
+    ## Enrollment Periods Processing
+    # Open Enrollment Period
     ma_data["OEP"] = ma_data["sk_submitted_date"].apply(
         lambda x: get_enrollment_periods(date=x, period="OEP")
     )
+    # Medicare Advantage Open Enrollment Period
     ma_data["MA_OEP"] = ma_data["sk_submitted_date"].apply(
         lambda x: get_enrollment_periods(date=x, period="MA_OEP")
     )
-
+    # Special Enrollment Period
     ma_data["SEP"] = ma_data["sk_submitted_date"].apply(
         lambda x: get_enrollment_periods(date=x, period="SEP")
     )
@@ -167,6 +177,23 @@ def get_MedAdv_data(engine, save_csv=False):
 
 
 def get_enrollment_periods(date: datetime, period: str):
+    """
+    Helper function to assign whether the input date falls in
+    the specified enrollment period.
+    For example:
+    If the input date is November 30 of any year,
+        OEP = 1
+        MA_OEP = 0
+        SEP = 0
+
+    Args:
+        date: Input date
+        period: Period to check
+
+    Returns:
+        int: 0 or 1, depending on whether the date falls
+             in the enrollment period
+    """
 
     if period.lower() == "oep":
         oep = 0
@@ -194,6 +221,21 @@ def get_enrollment_periods(date: datetime, period: str):
 
 
 def get_jornaya_data(leads: list, engine, save_csv=False):
+    """
+    Load the Jornaya Data from HC datamart using the AWS Redshift
+    engine and the specified SQL Query and apply minor data preprocessing.
+    The query specifies to only extract data samples with product as
+    "MEDICARE" for Medicare Advantage and with lead IDs as available in
+    the input "leads" list.
+
+    Args:
+        leads: A list of Lead IDs
+        engine: AWS Redshift engine to download data with using the Query.
+        save_csv: Boolean to specify file saving
+
+    Returns:
+        Jornaya dataset.
+    """
 
     jor_sql = f"""
     SELECT tje.response_audit_authentic,
@@ -248,7 +290,20 @@ def get_jornaya_data(leads: list, engine, save_csv=False):
 
 
 def get_zip_data(username: str, password: str, account: str, save_csv=False):
+    """
+    Load the Zipcode ZCTA Data from Snowflake Data Warehouse (using a snowflake account)
+    and the specified SQL Query.
+    Apply minor data preprocessing.
 
+    Args:
+        username: Snowflake account username
+        password: Snowflake account password
+        account: Snowflake account name.
+        save_csv: Boolean to specify file saving
+
+    Returns:
+        Zipcpde ZCTA dataset.
+    """
     connect = snowflake.connector.connect(
         user=username, password=password, account=account
     )
@@ -273,6 +328,20 @@ def get_zip_data(username: str, password: str, account: str, save_csv=False):
 
 
 def get_county_city_data(username: str, password: str, account: str):
+    """
+    Load the County and City Data from Snowflake Data Warehouse (using a
+    snowflake account).
+    The specified SQL Query is used to collate the dataset.
+    Also apply minor data preprocessing.
+
+    Args:
+        username: Snowflake account username
+        password: Snowflake account password
+        account: Snowflake account name.
+
+    Returns:
+        County and City dataset.
+    """
 
     connect = snowflake.connector.connect(
         user=username, password=password, account=account
@@ -305,13 +374,19 @@ def get_county_city_data(username: str, password: str, account: str):
     return county_city
 
 
-def load_transunion_data(phones: list, username: str, password: str, account: str):
+def load_transunion_data(username: str, password: str, account: str):
     """
     Loads the TransUnion data from the Snowflake Data Warehouse
     using the user specified credentials.
+    The specified SQL Query is used to collate the dataset.
+
     Args:
+        username: Snowflake account username
+        password: Snowflake account password
+        account: Snowflake account name.
 
     Returns:
+        Full TransUnion dataset.
 
     """
     connect = snowflake.connector.connect(
@@ -358,7 +433,26 @@ def preprocess_transunion_data(
     last_names_list: list,
     save_csv=False,
 ):
-    """ """
+    """
+    Loads and preprocessed the TransUnion data from the Snowflake
+    Data Warehouse using the user specified credentials.
+    The TU dataset is truncated to contain only the names and
+    phone numbers of customers present in the input lists of
+    phone numbers, first names and last names.
+    Also apply data preprocessing to some features.
+
+    Args:
+        username: Snowflake account username
+        password: Snowflake account password
+        account: Snowflake account name.
+        phone_numbers_list: List of all phone numbers
+        first_names_list: List of all First Names
+        last_names_list: List of all Last names
+        save_csv: Boolean to specify file saving. Defaults to False.
+
+    Returns:
+        Truncated TU data.
+    """
     # Load TU Data
     tu_data = load_transunion_data(
         phones=phone_numbers_list, username=username, password=password, account=account
@@ -394,6 +488,27 @@ def preprocess_transunion_data(
 
 
 def get_united_features(df: pd.DataFrame, features_with: list):
+    """
+    Unites (or takes a union of) the features in the dataset that
+    are similar/same.
+    All the features to consider for unification are specified in
+    the CONFIG.INI file.
+
+    For example,
+    We want to unite all features that contain "CITY" information.
+    We specify "CITY" in the config file.
+    If the input dataset contains 3 features that relate to city namely,
+    tu_CITY, zcta_CITY and City, then this function will take a union of
+    these features and returns only one column that represents the city.
+
+    Args:
+        df: Input dataframe
+        features_with: List of strings that contain partial/full names of
+                       featurs/columns to unite.
+
+    Returns:
+        Updated dataframe with similar columns replaced with united columns.
+    """
 
     for feat in features_with:
         common_features = [col for col in df.columns if feat in col.lower()]

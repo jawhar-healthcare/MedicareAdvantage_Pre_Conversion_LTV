@@ -5,11 +5,9 @@ import pandas as pd
 import pathlib
 import boto3
 import json
-from scipy.fftpack import cc_diff
 from sqlalchemy import create_engine, text
 import psycopg2
 from typing import Optional, Tuple, Union
-from pyparsing import col
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -17,8 +15,6 @@ from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
 )
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline, make_pipeline
 
 from utils.utils import get_logger, get_secret
 from utils.load_config_file import load_config_file
@@ -36,6 +32,16 @@ PATHS_CONFIG = "config/config.ini"
 
 
 def get_aws_credentials(secrets_path: Union[str, pathlib.Path], db_list: list):
+    """
+    Download AWS credentials from AWS Secretsmanager
+
+    Args:
+        secrets_path: Path to the secrets.json file
+        db_list: List of databases to extract data from.
+
+    Returns:
+        AWS Credentials
+    """
     ## Check if system is configured with AWS IAM account
     try:
         user_arn = boto3.resource("iam").CurrentUser().arn
@@ -62,6 +68,16 @@ def get_aws_credentials(secrets_path: Union[str, pathlib.Path], db_list: list):
 
 
 def get_aws_engines(secrets_path: Union[str, pathlib.Path], db_list: list):
+    """
+    Load AWS Redshift engines
+
+    Args:
+        secrets_path:Path to the secrets.json file
+        db_list: List of databases to extract data from.
+
+    Returns:
+        list: AWS engines
+    """
     aws_secrets = get_aws_credentials(secrets_path=secrets_path, db_list=db_list)
     aws_engines = {}
     for db in db_list:
@@ -79,6 +95,14 @@ def get_aws_engines(secrets_path: Union[str, pathlib.Path], db_list: list):
 
 
 def get_ma_pre_conversion_data():
+    """
+    Preprocessed the data from various sources and merges/concatenates
+    them into a singular "pre-conversion MA LTV" dataset to be used for
+    model training.
+
+    Returns:
+        Pre-conversion MA LTV dataset
+    """
 
     ## Load paths from config file
     paths = load_config_file(config_path=PATHS_CONFIG)

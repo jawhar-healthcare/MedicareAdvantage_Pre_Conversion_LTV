@@ -3,20 +3,17 @@ import pandas as pd
 import os
 import boto3
 import json
-from pyparsing import col
-from sqlalchemy import create_engine, text
 import psycopg2
 from typing import Optional, Tuple, Union
 import logging
 import pathlib
 from logging import handlers
-from utils.utils import get_secret, get_logger, load_data
+from utils.utils import get_logger, load_data
 from utils.load_config_file import load_config_file
 
 from utils.ma_preprocessing_utils import (
     get_post_conversion_data,
     get_united_features,
-    get_county_city_data,
 )
 from utils.ma_pre_conversion import get_ma_pre_conversion_data
 
@@ -50,9 +47,7 @@ def main():
     ma_postconv = pd.merge(
         pre_data,
         post_data,
-        # left_on=["application_id", "policy_id"],
         left_on=["application_id"],
-        # right_on=["post_raw_application_id", "post_raw_policy_id"],
         right_on=["post_raw_application_id"],
         how="right",
         suffixes=("", "_xp"),
@@ -63,18 +58,14 @@ def main():
 
     ltv_feat = [feat for feat in ma_postconv.columns if "ltv" in feat.lower()][0]
 
+    if len(ltv_feat) != 1:
+        print("Multiple LTV features detected. Check Post-Conv Dataset.")
+
     ma_postconv.rename(columns={ltv_feat: "LTV"}, inplace=True)
 
     ma_postconv = get_united_features(
         df=ma_postconv, features_with=config["unite_features_with"]
     )
-
-    # ## Replace TU data
-    # tu_cols = [col for col in ma_postconv.columns if "tu_" in col]
-
-    # new_tu_data = pd.read_excel("data/tu_data_latest.xlsx")
-
-    # new_tu_data = new_tu_data[]
 
     ma_postconv.to_csv(config["ma_ltv_data_path"], index=False)
 

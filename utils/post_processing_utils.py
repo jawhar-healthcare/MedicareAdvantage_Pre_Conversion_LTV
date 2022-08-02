@@ -9,12 +9,26 @@ from sklearn.model_selection import train_test_split
 
 from utils.load_config_file import load_config_file
 
-# from load_config_file import load_config_file
-
 
 def process_catboost(
     data: pd.DataFrame, config_path: str, for_training=True, save_csv=True
 ):
+    """
+    Preprocess the input dataframe for data exploration, training or
+    evaluation of CatBoost model.
+    If training is to be done, dataframe can be standardized/normalized.
+    If training is not to be done, original data values are retained.
+
+    Args:
+        data: Input Dataframe
+        config_path: Path to config file
+        for_training: If dataset is to be used for training. Defaults to True.
+        save_csv: Save as a CSV. Defaults to True.
+
+    Returns:
+        X_train: Train dataset with response variable (LTV)
+        X_test: Test dataset with response variable (LTV)
+    """
 
     config = load_config_file(config_path=config_path)
     target = config["target"]
@@ -96,12 +110,3 @@ def process_catboost(
         X_test.to_csv(config["test_data_path"], index=False)
 
     return X_train, X_test
-
-
-# if __name__ == "__main__":
-#     p = "./data/with_zcta/ma_ltv_merged.csv"
-#     z = pd.read_csv(p, low_memory=False)
-
-#     x = process_catboost(data=z, config_path="./config/config.ini")
-
-#     print(p)
