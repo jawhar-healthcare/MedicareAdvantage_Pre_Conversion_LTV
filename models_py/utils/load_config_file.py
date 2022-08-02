@@ -1,12 +1,13 @@
 import configparser
 import json
 import pathlib
-import logging
-from utils.utils import get_logger
 
-# from utils import get_logger
+# import logging
+# from utils import get_
 
-logger = get_logger(name=pathlib.Path(__file__))
+# # from utils import get_logger
+
+# logger = get_logger(name=pathlib.Path(__file__))
 
 
 def load_config_file(config_path: str):
@@ -15,7 +16,7 @@ def load_config_file(config_path: str):
     Args:
         config_path: _description_
     """
-    logger.info("Loading config file..")
+    # logger.info("Loading config file..")
     converters = {
         "list_int": lambda x: [int(i.strip()) for i in x.split(", ")],
         "list_none": lambda x: None if x.lower() == "none" else int(x),
@@ -45,10 +46,6 @@ def load_config_file(config_path: str):
     config_file["ma_ltv_data_path"] = config_data.getpathlib(
         section, "ma_ltv_data_path"
     )
-    config_file["path_to_synthetic_data"] = config_data.getpathlib(
-        section, "path_to_synthetic_data"
-    )
-
     config_file["train_data_path"] = config_data.getpathlib(section, "train_data_path")
     config_file["test_data_path"] = config_data.getpathlib(section, "test_data_path")
 
@@ -76,6 +73,6 @@ def load_config_file(config_path: str):
     # getint
     # getlist_int
 
-    logger.info(f"Config file at {config_path} is Loaded")
+    # logger.info(f"Config file at {config_path} is Loaded")
 
     return config_file

@@ -8,7 +8,6 @@ import json
 from sqlalchemy import create_engine, text
 import psycopg2
 from typing import Optional, Tuple, Union
-from pyparsing import col
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -16,23 +15,33 @@ from sklearn.preprocessing import (
     LabelEncoder,
     OneHotEncoder,
 )
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline, make_pipeline
 
 from utils.utils import get_logger, get_secret
 from utils.load_config_file import load_config_file
 from utils.ma_preprocessing_utils import (
     get_MedAdv_data,
     get_jornaya_data,
-    get_zip_enrch_data,
+    get_zip_data,
+    get_county_city_data,
     preprocess_transunion_data,
 )
+from dotenv import load_dotenv
 
 logger = get_logger(name=pathlib.Path(__file__))
 PATHS_CONFIG = "config/config.ini"
 
 
 def get_aws_credentials(secrets_path: Union[str, pathlib.Path], db_list: list):
+    """
+    Download AWS credentials from AWS Secretsmanager
+
+    Args:
+        secrets_path: Path to the secrets.json file
+        db_list: List of databases to extract data from.
+
+    Returns:
+        AWS Credentials
+    """
     ## Check if system is configured with AWS IAM account
     try:
         user_arn = boto3.resource("iam").CurrentUser().arn
@@ -59,6 +68,16 @@ def get_aws_credentials(secrets_path: Union[str, pathlib.Path], db_list: list):
 
 
 def get_aws_engines(secrets_path: Union[str, pathlib.Path], db_list: list):
+    """
+    Load AWS Redshift engines
+
+    Args:
+        secrets_path:Path to the secrets.json file
+        db_list: List of databases to extract data from.
+
+    Returns:
+        list: AWS engines
+    """
     aws_secrets = get_aws_credentials(secrets_path=secrets_path, db_list=db_list)
     aws_engines = {}
     for db in db_list:
@@ -76,9 +95,20 @@ def get_aws_engines(secrets_path: Union[str, pathlib.Path], db_list: list):
 
 
 def get_ma_pre_conversion_data():
+    """
+    Preprocessed the data from various sources and merges/concatenates
+    them into a singular "pre-conversion MA LTV" dataset to be used for
+    model training.
+
+    Returns:
+        Pre-conversion MA LTV dataset
+    """
 
     ## Load paths from config file
     paths = load_config_file(config_path=PATHS_CONFIG)
+
+    ## Load .env file variables
+    load_dotenv(dotenv_path=paths["env_file_path"])
 
     # Get AWS Engines
     database_list = ["hc", "isc"]
@@ -105,20 +135,25 @@ def get_ma_pre_conversion_data():
         data,
         jrn_data,
         left_on=["lead_id"],
-        right_on=["jrn_boberdoo_lead_id"],
+        right_on=["jrn_lead_id"],
         how="left",
         suffixes=("", "_xj"),
     )
 
     ## Drop Duplicated Column names with "_xj" suffix
     duplicated_columns = [x for x in data.columns if "_xj" in x]
-    duplicated_columns.append("jrn_boberdoo_lead_id")
+    duplicated_columns.append("jrn_lead_id")
     data = data.drop(columns=duplicated_columns)
 
     ### Zipcode Data ###
 
-    ## Get Zipcode Enriched Data
-    zip_data = get_zip_enrch_data(engine=aws_engines["hc"], save_csv=True)
+    ## Get Zipcode ZCTA Data
+    zip_data = get_zip_data(
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
+        save_csv=True,
+    )
 
     zip_data = zip_data.groupby(by="zcta_zcta").first().reset_index()
 
@@ -137,7 +172,29 @@ def get_ma_pre_conversion_data():
     duplicated_columns.append("zcta_zcta")
     data = data.drop(columns=duplicated_columns)
 
-    ## Some preprocessing on merged dataset
+    # ## GET COUNTY-CITY DATA
+    cc_data = get_county_city_data(
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
+    )
+
+    cc_data = cc_data.groupby(by="zcta").first().reset_index()
+
+    data = pd.merge(
+        data,
+        cc_data,
+        left_on=["app_zip_code"],
+        right_on=["zcta"],
+        how="left",
+        suffixes=("", "_xcc"),
+    )
+    ## Drop Duplicated Column names with "_xcc" suffix
+    duplicated_columns = [x for x in data.columns if "_xcc" in x]
+    duplicated_columns.append("zcta")
+    data = data.drop(columns=duplicated_columns)
+
+    # ## Some preprocessing on merged dataset
     data["first_name"] = data["first_name"].str.lower()
     data["last_name"] = data["last_name"].str.lower()
 
@@ -149,9 +206,9 @@ def get_ma_pre_conversion_data():
 
     ## Get Transunion Data
     tu_data = preprocess_transunion_data(
-        username="rutvik_bhende",
-        password="0723@RutuJuly",
-        account="uza72979.us-east-1",
+        username=os.getenv("snowflake_username"),
+        password=os.getenv("snowflake_password"),
+        account=os.getenv("snowflake_account"),
         phone_numbers_list=ma_phone_nums,
         first_names_list=ma_first_names,
         last_names_list=ma_last_names,
@@ -159,7 +216,7 @@ def get_ma_pre_conversion_data():
     )
 
     tu_data = (
-        tu_data.groupby(by=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"])
+        tu_data.groupby(by=["tu_phone_number", "tu_first_name", "tu_last_name"])
         .first()
         .reset_index()
     )
@@ -169,16 +226,16 @@ def get_ma_pre_conversion_data():
         data,
         tu_data,
         left_on=["owner_phone", "first_name", "last_name"],
-        right_on=["tu_PHONE_NUMBER", "tu_FIRST_NAME", "tu_LAST_NAME"],
+        right_on=["tu_phone_number", "tu_first_name", "tu_last_name"],
         how="left",
         suffixes=("", "_xtu"),
     )
 
     ## Drop Duplicated Column names with "_tu" suffix
     duplicated_columns = [x for x in data.columns if "_xtu" in x]
-    duplicated_columns.append("tu_PHONE_NUMBER")
-    duplicated_columns.append("tu_FIRST_NAME")
-    duplicated_columns.append("tu_LAST_NAME")
+    duplicated_columns.append("tu_phone_number")
+    duplicated_columns.append("tu_first_name")
+    duplicated_columns.append("tu_last_name")
     data = data.drop(columns=duplicated_columns)
 
     data = data.drop_duplicates(keep="last", ignore_index=True)

@@ -1,0 +1,11 @@
+mlflow==1.26.0
+catboost
+matplotlib
+scikit-learn
+boto3
+ipython
+shap
+lightgbm
+fsspec
+s3fs
+fastparquet
