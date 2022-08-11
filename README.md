@@ -72,3 +72,10 @@ This repo contains python scripts and notebooks for querying ISC, Zipcode, Jorna
 - CatBoost model training on MLFlow with MA data and Synthetic CMS MA data.
 - Training, testing and evaluation of regression metrics and SHAP analysis by @Rutvik.
 - Single estimator fit and Hyperparameter Tuner fits included.
+
+
+### Pipfile 
+- Pipfile facilitates the creation of a virtual environment or a pipenv (pip environment) in the MLflow container
+
+### Pipfile.lock
+- This file is created automatically when we build a pipenv
