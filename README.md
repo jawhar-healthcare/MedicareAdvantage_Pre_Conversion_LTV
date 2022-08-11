@@ -5,7 +5,7 @@ The models used for predicting the LTVs can be used by ambassadors as well for r
 
 This repo contains python scripts and notebooks for querying ISC, Zipcode, Jornaya, and TransUnion Data, its preprocessing, and subsequent modelling of regression algorithms on this MA data for the purpose of calculating Pre Conversion LTV for Medicare Advantage phone, online lead forms and data lead pings.
 
-Brief descriptions on the repo folders and their contents:
+## Brief descriptions on the repo's folders and their contents:
 
 ### config
 #### config.ini
@@ -29,7 +29,7 @@ Brief descriptions on the repo folders and their contents:
 #### requirements.txt
  - File containing python libraries that would be essential to run user's training scripts inside the docker container on MFLflow.
 
-#### train_catboost.py , train_clgbm.py, train_xgboost.py
+#### train_catboost.py , train_lgbm.py, train_xgboost.py
  - MLFlow training scripts
 
 ### utils
@@ -48,4 +48,27 @@ Brief descriptions on the repo folders and their contents:
 #### utils.py
 - File with utility functions that can be used and re-used in any part of the code to facilitate better code functionality.
 
+## Brief descriptions on the repo's Jupyter Notebooks
 
+### All_models.ipynb
+- Preliminary data exploration and CatBoost modelling on MA Data by @Jawhar.
+
+### MACleaning.ipynb
+- Preliminary data cleaning, preprocessing and XGBoost modelling on MA Data by @Jawhar.
+
+### MA_Syn.ipynb
+- Data exploration and analysis on MA Data by @Jawhar.
+
+### model_dev.ipynb
+- CatBoost model training on Local Machine with MA data only.
+- Training, testing and evaluation of regression metrics and SHAP analysis by @Rutvik.
+
+### ltv-models-training.ipynb
+- CatBoost model training on MLFlow with MA data only.
+- Training, testing and evaluation of regression metrics and SHAP analysis by @Rutvik.
+- Single estimator fit and Hyperparameter Tuner fits included.
+
+### cms_ma_model.ipynb
+- CatBoost model training on MLFlow with MA data and Synthetic CMS MA data.
+- Training, testing and evaluation of regression metrics and SHAP analysis by @Rutvik.
+- Single estimator fit and Hyperparameter Tuner fits included.
