@@ -5,6 +5,18 @@ The models used for predicting the LTVs can be used by ambassadors as well for r
 
 This repo contains python scripts and notebooks for querying ISC, Zipcode, Jornaya, and TransUnion Data, its preprocessing, and subsequent modelling of regression algorithms on this MA data for the purpose of calculating Pre Conversion LTV for Medicare Advantage phone, online lead forms and data lead pings.
 
+## Brief descriptions on the repo's files
+
+### main.py
+- Main python script for collating the MA dataset with all Pre-conversion and Post-conversion LTV values, that which will be used for regression model development.
+
+### Pipfile 
+- Pipfile facilitates the creation of a virtual environment or a pipenv (pip environment) in the MLflow container
+
+### Pipfile.lock
+- This file is created automatically when we build a pipenv
+
+
 ## Brief descriptions on the repo's folders and their contents:
 
 ### config
@@ -72,10 +84,3 @@ This repo contains python scripts and notebooks for querying ISC, Zipcode, Jorna
 - CatBoost model training on MLFlow with MA data and Synthetic CMS MA data.
 - Training, testing and evaluation of regression metrics and SHAP analysis by @Rutvik.
 - Single estimator fit and Hyperparameter Tuner fits included.
-
-
-### Pipfile 
-- Pipfile facilitates the creation of a virtual environment or a pipenv (pip environment) in the MLflow container
-
-### Pipfile.lock
-- This file is created automatically when we build a pipenv
